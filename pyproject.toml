@@ -1,0 +1,62 @@
+[project]
+name = "arctic-route-risk"
+version = "0.1.0"
+description = "北极航线工作包 B：A 数据到逐小时 BC RiskFrame 的可审计风险流水线"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "arctic-route-contracts>=0.2,<0.3",
+    "arctic-route-data>=0.4.1,<0.5",
+    "arctic-route-planning>=0.3,<0.4",
+    "jsonschema>=4.23,<5",
+    "numpy>=2.2,<3",
+    "xarray>=2025.1,<2027",
+]
+
+[tool.uv.sources]
+arctic-route-contracts = { path = "../arctic_route_contracts", editable = true }
+arctic-route-data = { path = "../work_package_a", editable = true }
+arctic-route-planning = { path = "../work_package_c", editable = true }
+
+[project.scripts]
+arctic-route-risk = "arctic_route_risk.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<10",
+    "pytest-cov>=6,<8",
+    "ruff>=0.11,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/arctic_route_risk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: cross-package A-B-C fixture acceptance",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = [
+    ".mamba-env",
+    ".uv-cache",
+    ".uv-python",
+    ".venv",
+    "data",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["RUF001"]
+
+[tool.coverage.run]
+branch = true
+source = ["arctic_route_risk"]

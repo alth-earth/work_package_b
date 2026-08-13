@@ -1,0 +1,24 @@
+{
+  "schema_version": "b.risk-build-configuration.v1",
+  "grid_config": {
+    "schema_version": "b.target-grid-policy.v1",
+    "crs": "EPSG:4326",
+    "latitude_step_degrees": 1.0,
+    "longitude_step_degrees": 1.0,
+    "shape_rule": "cover_bbox_endpoints_v1",
+    "continuous_method": "linear_v1",
+    "categorical_method": "nearest_v1"
+  },
+  "model_config": {
+    "schema_version": "b.demo-risk-model-config.v1",
+    "model_version": "demo_unvalidated_rule_baseline.v1",
+    "calibration_status": "demo_unvalidated",
+    "interval_minutes": 60,
+    "temporal_policy_version": "visible_supports_hourly_v1",
+    "formula_version": "deterministic_environment_components_v1",
+    "risk_level_policy": "c_equal_width_floor_v1",
+    "hard_mask_policy": "land_sea_mask_land_or_coast_only_v1",
+    "unknown_policy": "nan_confidence_zero_v1",
+    "minimum_speed_factor": 0.35
+  }
+}
