@@ -1,13 +1,13 @@
 [project]
 name = "arctic-route-risk"
-version = "0.1.0"
+version = "0.2.0"
 description = "北极航线工作包 B：A 数据到逐小时 BC RiskFrame 的可审计风险流水线"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "arctic-route-contracts>=0.2,<0.3",
+    "arctic-route-contracts>=0.2,<0.4",
     "arctic-route-data>=0.4.1,<0.5",
-    "arctic-route-planning>=0.3,<0.4",
+    "arctic-route-planning>=0.3,<0.5",
     "jsonschema>=4.23,<5",
     "numpy>=2.2,<3",
     "xarray>=2025.1,<2027",
@@ -17,9 +17,21 @@ dependencies = [
 arctic-route-contracts = { path = "../arctic_route_contracts", editable = true }
 arctic-route-data = { path = "../work_package_a", editable = true }
 arctic-route-planning = { path = "../work_package_c", editable = true }
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [project.scripts]
 arctic-route-risk = "arctic_route_risk.cli:main"
+
+[project.optional-dependencies]
+model-cpu = [
+    "safetensors>=0.8,<0.9",
+    "torch>=2.13,<2.14",
+]
 
 [dependency-groups]
 dev = [
@@ -40,6 +52,7 @@ testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 markers = [
     "integration: cross-package A-B-C fixture acceptance",
+    "model: optional CPU model intake and single-step backend checks",
 ]
 
 [tool.ruff]

@@ -7,6 +7,10 @@ B 直接构造 C 公共 `RiskFrame`，并使用 C 公共 codec 生成：
 - canonical JSON bytes 和内容摘要；
 - `RiskWindowQuery` 与 `CommittedRiskWindow`。
 
+该合同对 B 内部模型后端保持中立。规则或未来 CNN 都必须经过相同的 hard mask、risk level、
+confidence、speed factor、canonical identity 和 store 门禁；模型专属诊断只写 sidecar/run
+report，不能给禁止额外变量的 `RiskFrame v2` payload 加字段。后端替换本身不要求修改 C。
+
 `PersistentRiskStore` 同时实现传统 `get_window/latest_before` 和正式
 `get_committed_window(query)`。commit manifest 绑定完整查询身份、起止/间隔/数量、每个 risk ID
 及内容摘要。帧和 commit 都不可覆盖；同内容重复发布幂等，同 ID 或同查询不同内容拒绝。
@@ -29,6 +33,13 @@ lease 从精确 commit 读取保持到规划返回；此期间同 run 的 `activ
 encode→decode，形成与调用方 xarray 完全脱离的私有快照。frame bytes、window digest、manifest
 和 query pointer 全程只从该快照产生；调用方在发布中途替换变量或属性不能制造相互矛盾且无法
 恢复的已提交制品。
+
+时间触发重规划使用
+`publish_suffix_window(frames, start=<simulation_start+6h>)`：该入口先复核传入的完整 formal
+小时序列，再按精确命中的 UTC 帧边界截取 `[start, original_end]`，最后复用同一原子提交
+协议。它不重新编码业务内容或生成新 RiskFrame，因此 suffix commit 中的 risk IDs、
+generation、as-of、运行身份和模型摘要都与原完整窗口一致。非整点/不存在的起点、输入缺帧、
+重复、混合身份或非 canonical 帧都会拒绝。
 
 C 的正式 `execute()` 会在租约内再次取得同一 committed window，将帧经 C canonical codec
 编码/解码为私有快照，再从该快照重建规划输入；因此 prepare 后对暴露 xarray 的替换不会进入

@@ -18,6 +18,7 @@ from arctic_route_planning.contracts import (
 from arctic_route_risk.bc_codec import with_canonical_risk_id
 from arctic_route_risk.config import (
     DemoRiskModelConfig,
+    RiskComponentConfig,
     TargetGridConfig,
     model_config_digest,
 )
@@ -41,7 +42,19 @@ _VARIABLES: dict[str, tuple[str, ...]] = {
 _CATEGORICAL = frozenset({"sea_ice_type", "sea_ice_edge"})
 _STATIC = frozenset({"land_sea_mask"})
 _SPATIAL_NEAREST = _CATEGORICAL | _STATIC
-_QUALITY_CONFIDENCE = {"good": 1.0, "suspect": 0.75, "degraded": 0.5}
+_COMPONENT_INPUTS: dict[str, tuple[str, ...]] = {
+    "ice_concentration": ("ice_concentration",),
+    "ice_thickness": ("ice_thickness",),
+    "ice_type": ("ice_type",),
+    "ice_edge": ("ice_edge",),
+    "ice_drift_speed": ("ice_drift_u", "ice_drift_v"),
+    "wave_height": ("significant_wave_height",),
+    "ocean_current_speed": ("ocean_current_u", "ocean_current_v"),
+    "wind_speed": ("wind_u10", "wind_v10"),
+    "freezing_deficit": ("air_temperature_2m",),
+    "visibility_deficit": ("visibility",),
+    "water_level_magnitude": ("sea_surface_height",),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +138,7 @@ class RiskBuildService:
                 latitude=latitude,
                 longitude=longitude,
                 target_bbox=request.target_bbox,
+                model_config=request.model_config,
             )
             for data_type in sorted(REQUIRED_FORMAL_DATA_TYPES)
         }
@@ -136,7 +150,7 @@ class RiskBuildService:
         risk, hard, confidence, speed_factor = _demo_unvalidated_risk(
             arrays,
             source_confidence=min(field.confidence for field in resolved.values()),
-            minimum_speed_factor=request.model_config.minimum_speed_factor,
+            model_config=request.model_config,
         )
         level = np.full(risk.shape, 5, dtype=np.uint8)
         finite = np.isfinite(risk)
@@ -200,6 +214,7 @@ def _resolve_field(
     latitude: np.ndarray,
     longitude: np.ndarray,
     target_bbox: tuple[float, float, float, float],
+    model_config: DemoRiskModelConfig,
 ) -> _ResolvedField:
     if not frames:
         raise CoverageError(f"forecast_coverage_insufficient: no {data_type} frames")
@@ -212,12 +227,16 @@ def _resolve_field(
     if data_type in _STATIC:
         support = _static_support(ordered, target_time)
         fraction = 0.0
-        method_confidence = 1.0
+        method_confidence = model_config.temporal_method_confidence.static
     elif data_type in _CATEGORICAL:
         lower, upper = _bracket(ordered, target_time, data_type)
         support = (_nearest(lower, upper, target_time),)
         fraction = 0.0
-        method_confidence = 1.0 if support[0].record.valid_time == target_time else 0.85
+        method_confidence = (
+            model_config.temporal_method_confidence.exact
+            if support[0].record.valid_time == target_time
+            else model_config.temporal_method_confidence.categorical_nearest
+        )
     else:
         lower, upper = _bracket(ordered, target_time, data_type)
         support = (lower,) if lower is upper else (lower, upper)
@@ -227,7 +246,11 @@ def _resolve_field(
             if total == 0
             else (target_time - lower.record.valid_time).total_seconds() / total
         )
-        method_confidence = 1.0 if len(support) == 1 else 0.9
+        method_confidence = (
+            model_config.temporal_method_confidence.exact
+            if len(support) == 1
+            else model_config.temporal_method_confidence.linear_interpolation
+        )
     for frame in support:
         if not _bbox_contains(frame.record.bbox, target_bbox):
             raise GridCompatibilityError(
@@ -249,7 +272,10 @@ def _resolve_field(
                 support[1], variable, latitude, longitude, categorical=False
             )
             variables[variable] = lower_values + (upper_values - lower_values) * fraction
-    quality = min(_QUALITY_CONFIDENCE[frame.record.quality_flag.value] for frame in support)
+    quality = min(
+        getattr(model_config.quality_confidence, frame.record.quality_flag.value)
+        for frame in support
+    )
     return _ResolvedField(
         variables=variables,
         support_frames=support,
@@ -360,36 +386,61 @@ def _regrid_variable(
 
 
 def _demo_unvalidated_risk(
-    values: dict[str, np.ndarray], *, source_confidence: float, minimum_speed_factor: float
+    values: dict[str, np.ndarray],
+    *,
+    source_confidence: float,
+    model_config: DemoRiskModelConfig,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    def magnitude(u: str, v: str) -> np.ndarray:
-        return np.hypot(values[u], values[v])
-    components = (
-        (0.24, _bounded(values["ice_concentration"], 0.0, 1.0)),
-        (0.14, _bounded(values["ice_thickness"], 0.0, 3.0)),
-        (0.05, _bounded(values["ice_type"], 0.0, 4.0)),
-        (0.02, _bounded(values["ice_edge"], 0.0, 1.0)),
-        (0.06, _bounded(magnitude("ice_drift_u", "ice_drift_v"), 0.0, 1.5)),
-        (0.13, _bounded(values["significant_wave_height"], 0.0, 8.0)),
-        (0.07, _bounded(magnitude("ocean_current_u", "ocean_current_v"), 0.0, 2.0)),
-        (0.10, _bounded(magnitude("wind_u10", "wind_v10"), 0.0, 30.0)),
-        (0.05, _bounded(273.15 - values["air_temperature_2m"], 0.0, 30.0)),
-        (0.10, _bounded(10_000.0 - values["visibility"], 0.0, 10_000.0)),
-        (0.04, _bounded(np.abs(values["sea_surface_height"]), 0.0, 3.0)),
+    components = tuple(
+        (
+            component.weight,
+            _risk_component(values, component),
+        )
+        for component in model_config.components
     )
     risk = sum(weight * component for weight, component in components)
     valid = np.logical_and.reduce([np.isfinite(component) for _, component in components])
     land_sea = values["land_sea_mask"]
-    hard = ~np.isfinite(land_sea) | (land_sea < 0.5)
+    hard = ~np.isfinite(land_sea) | (
+        land_sea < model_config.land_sea_mask_land_threshold
+    )
     valid &= np.isfinite(land_sea)
     risk = np.where(valid, np.clip(risk, 0.0, 1.0), np.nan)
     confidence = np.where(valid, source_confidence, 0.0)
     speed = np.where(
         valid,
-        np.clip(1.0 - 0.55 * risk, minimum_speed_factor, 1.0),
-        minimum_speed_factor,
+        np.clip(
+            1.0 - model_config.speed_risk_coefficient * risk,
+            model_config.minimum_speed_factor,
+            1.0,
+        ),
+        model_config.minimum_speed_factor,
     )
     return risk, hard, confidence, speed
+
+
+def _risk_component(
+    values: dict[str, np.ndarray], component: RiskComponentConfig
+) -> np.ndarray:
+    inputs = tuple(values[name] for name in _COMPONENT_INPUTS[component.component_id])
+    if component.transform == "identity":
+        transformed = inputs[0]
+        return _bounded(transformed, component.lower, component.upper)
+    if component.transform == "absolute":
+        transformed = np.abs(inputs[0])
+        return _bounded(transformed, component.lower, component.upper)
+    if component.transform == "vector_magnitude":
+        transformed = np.hypot(inputs[0], inputs[1])
+        return _bounded(transformed, component.lower, component.upper)
+    if component.transform == "inverse_linear":
+        return np.clip(
+            (component.upper - inputs[0]) / (component.upper - component.lower),
+            0.0,
+            1.0,
+        )
+    raise RiskPipelineError(
+        f"unsupported transform at runtime: {component.component_id}/{component.transform}"
+    )
 
 
 def _bounded(values: np.ndarray, lower: float, upper: float) -> np.ndarray:

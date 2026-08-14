@@ -1,0 +1,69 @@
+{
+  "artifact_id": "legacy-cnn-one-step-v1",
+  "backend_id": "legacy_cnn_one_step",
+  "calibration_status": "experimental_unverified",
+  "conversion": "torch.weights_only_cpu_to_safetensors_v1",
+  "distribution_authorized_on": "2026-08-14",
+  "dtype": "float32",
+  "manifest_version": "b.model-artifact-manifest.v1",
+  "model_version": "legacy_cnn_one_step_v1",
+  "native_grid_step_degrees": 0.05,
+  "parameter_count": 18849,
+  "policy_id": "legacy_cnn_one_step_v1",
+  "predicted_valid_time": null,
+  "runtime": "cpu_only",
+  "safetensors_sha256": "602d4849ce0b2f5eda90db2a020b8ec69a00dc929d5e764ed412d0d03e205103",
+  "source_checkpoint_sha256": "0390fac17de1f082652fc5851b6979fd771d98ff803880c6562c54921e081666",
+  "source_member": "22_深度学习综合风险预测模型/downloads/model/comprehensive_risk_cnn.pth",
+  "source_zip_sha256": "a2ee74fd70cb0735695d9cf25ae8907a7c6d7aab866b7549d8142e412190ad79",
+  "tensor_keys": [
+    "net.0.bias",
+    "net.0.weight",
+    "net.2.bias",
+    "net.2.weight",
+    "net.4.bias",
+    "net.4.weight",
+    "net.6.bias",
+    "net.6.weight"
+  ],
+  "tensor_shapes": {
+    "net.0.bias": [
+      32
+    ],
+    "net.0.weight": [
+      32,
+      1,
+      3,
+      3
+    ],
+    "net.2.bias": [
+      32
+    ],
+    "net.2.weight": [
+      32,
+      32,
+      3,
+      3
+    ],
+    "net.4.bias": [
+      32
+    ],
+    "net.4.weight": [
+      32,
+      32,
+      3,
+      3
+    ],
+    "net.6.bias": [
+      1
+    ],
+    "net.6.weight": [
+      1,
+      32,
+      1,
+      1
+    ]
+  },
+  "time_step_status": "unknown",
+  "upstream_license": "not_provided"
+}

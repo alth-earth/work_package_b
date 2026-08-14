@@ -195,6 +195,68 @@ class PersistentRiskStore:
             )
         return committed
 
+    def publish_suffix_window(
+        self,
+        frames: Sequence[RiskFrame],
+        *,
+        start: datetime,
+        interval_minutes: int = 60,
+    ) -> CommittedRiskWindow:
+        """Commit an exact suffix of one complete formal hourly frame sequence.
+
+        This is the B boundary used by a later simulation-time replan. It does
+        not rebuild or rewrite frames: canonical IDs, generation, as-of, model
+        digest, and payloads remain identical to the full window. ``start``
+        must be UTC and exactly match an input frame; gaps, duplicates, mixed
+        identities, non-formal provenance, and non-canonical IDs fail closed.
+        """
+
+        start = _require_utc(start, field="start")
+        snapshots = tuple(_private_frame_snapshot(frame) for frame in frames)
+        if not snapshots:
+            raise RiskPipelineError("forecast_coverage_insufficient: cannot slice empty window")
+        if interval_minutes != 60:
+            raise RiskPipelineError("formal committed window interval must be exactly 60 minutes")
+        ordered = tuple(sorted(snapshots, key=lambda frame: frame.valid_time))
+        first = ordered[0]
+        for frame in ordered:
+            if frame.provenance is not ProvenanceKind.FORMAL:
+                raise PublicationConflictError(
+                    "PersistentRiskStore only accepts formal RiskFrame publications"
+                )
+            if not is_canonical_risk_id(frame.risk_id):
+                raise PublicationConflictError("formal publication has invalid canonical risk_id")
+            validate_canonical_risk_id(frame)
+            if frame.as_of_time != first.as_of_time:
+                raise PublicationConflictError(
+                    "suffix source window must use one exact as_of_time"
+                )
+        full_query = RiskWindowQuery(
+            start=first.valid_time,
+            end=ordered[-1].valid_time,
+            interval=timedelta(minutes=interval_minutes),
+            run_id=first.run_id,
+            scenario_id=first.scenario_id,
+            corridor_id=first.corridor_id,
+            generation_id=first.generation_id,
+            vessel_profile_id=first.vessel_profile_id,
+            config_digest=first.config_digest,
+            model_config_digest=first.model_config_digest,
+            as_of=first.as_of_time,
+        )
+        CommittedRiskWindow.create(full_query, ordered)
+        suffix = tuple(frame for frame in ordered if frame.valid_time >= start)
+        if not suffix or suffix[0].valid_time != start:
+            raise RiskPipelineError(
+                "forecast_coverage_insufficient: suffix start must exactly match an input frame"
+            )
+        return self.publish_window(
+            suffix,
+            start=start,
+            end=ordered[-1].valid_time,
+            interval_minutes=interval_minutes,
+        )
+
     def get_committed_window(self, query: RiskWindowQuery) -> CommittedRiskWindow:
         with self._run_fence(query.run_id, exclusive=False):
             return self._get_committed_window_locked(query)

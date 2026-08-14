@@ -2,8 +2,15 @@
 
 工作包 B 消费 A 公共接口提供的、与同一个共享 `RunContext` 精确绑定的
 `PreparedWindow + a.dataset-bundle.v2`，发布完整逐小时 `bc.risk-frame.v2` 窗口供 C
-规划。当前 `0.1.0` 是可审计的确定性规则基线，明确标记为 `demo_unvalidated`：它没有经过
+规划。当前 `0.2.0` 是可审计的确定性规则基线，明确标记为 `demo_unvalidated`：它没有经过
 事故、AIS 或真实船舶数据校准，不能用于真实导航。
+
+2026-08-14 收到的新 CNN ZIP 已按固定哈希受限转换为 safetensors，并完成 CPU 单步短测试。它
+基于旧 B 单通道综合风险、只输出未声明时长的下一步二维场；当前状态仍为
+`experimental_unverified`，只作为 opt-in shadow 后端，不替换规则主线、不生成逐小时窗口、不
+进入 store/C。审计、整合方案和完成状态见 [新模型静态审计](docs/DELIVERED_CNN_MODEL_AUDIT.md)、
+[整合方案](docs/DELIVERED_CNN_INTEGRATION_PLAN.md) 与
+[续开发 Handoff](../work_package_b_handoff/工作包B-新风险模型整合与续开发Handoff.md)。
 
 ## 一眼看懂流程
 
@@ -35,9 +42,28 @@ make integration
 已有 Python 3.13 和 uv 时，可以先执行 `uv sync --locked`。缓存和环境都在本工程目录内，
 不会把本地绝对路径写入运行合同。
 
+模型 CPU extra 是可选的，不影响默认规则环境：
+
+```bash
+make model-sync
+make model-check
+```
+
+转换资产位于 `models/legacy_cnn_one_step_v1/`，其中 safetensors SHA-256 为
+`602d4849ce0b2f5eda90db2a020b8ec69a00dc929d5e764ed412d0d03e205103`。原始 ZIP、`.pth`、脚本、
+训练数据和 `.pyc` 不进入仓库。资产的上游许可证未随交付提供，但用户已明确授权其于
+2026-08-14 在本公开仓库中再分发；详见 [资产声明](models/legacy_cnn_one_step_v1/MODEL_ASSET_NOTICE.md)。
+
+`LegacyCnnOneStepBackend` 只读 safetensors、固定 CPU/eval/inference mode，接受严格 0.05°
+的 `comprehensive_risk` 二维网格，输出 `predicted_valid_time=None` 和
+`time_step_status="unknown"`。`RiskBuildService` 仍直接使用规则函数，故本后端不会改变正式
+RiskFrame、store 或 C 链路。
+
 ## 公共 API
 
 ```python
+from datetime import timedelta
+
 from arctic_route_risk import (
     BInputEnvelope,
     PersistentRiskStore,
@@ -54,7 +80,7 @@ envelope = BInputEnvelope.from_prepared_window(
     knowledge_as_of=knowledge_as_of,
 )
 configuration = load_risk_build_configuration(
-    "configs/models/demo_unvalidated_v1.json"
+    "configs/models/demo_unvalidated_v2.json"
 )
 request = RiskBuildRequest(
     envelope=envelope,
@@ -68,6 +94,10 @@ store = PersistentRiskStore("data/bc-risk")
 unbind = store.bind_generation_authority(run_context.run_id, simulation_clock)
 try:
     commit = store.publish_window(frames)
+    suffix_commit = store.publish_suffix_window(
+        frames,
+        start=run_context.simulation_start + timedelta(hours=6),
+    )
 finally:
     unbind()
 ```
@@ -97,6 +127,25 @@ A 的 `payload_attestations` 逐 data ID 绑定完整 manifest record 与规范 
 `model_config_digest` 只绑定网格政策、时间政策和风险规则，不绑定具体走廊 bbox 或已实现坐标，
 因此同一配置可在两条走廊保持相同摘要；每个 RiskFrame 的 `grid_id` 则绑定实际坐标。
 
+0.2.0 的严格配置 v2 明列 11 个风险分量的权重、变换和归一化上下界，以及来源质量、时间
+处理方法、陆地阈值、风险—速度系数和最低环境速度因子。缺字段、额外字段、未知分量/变换、
+非有限数值、非法范围或非归一权重都会拒绝；所有数值叶子都进入
+`b.model-config.v2` 摘要。默认值保持 0.1.0 的输出数组语义不变，但模型版本和摘要按发布规则
+升级。
+旧 `demo_unvalidated_v1.json` 仅为 0.1.0 审计快照，当前严格 loader 不会把它静默升级为 v2。
+
+当前未冻结的 0.2.0 工作树暂用纬向 `0.75°`、经向 `2.2°` 作为 **fast smoke 候选**。按约
+70°N 的 `cos(latitude)` 粗略换算，两者约对应 83 km 与 84 km；两条走廊的空 hard-mask
+端点允许区均含节点，主走廊降为 `11×26`。但最近一次全链运行中，C 初始三目标仍约 27 分钟，
+重规划未完成；也没有真实 land mask、路线保真或科学分辨率证据。因此该值暂留用于合同和失败
+定位，不再称为正式默认。formal 候选 `0.5°×1.5°`、模型 native `0.05°×0.05°` 与 fast
+网格的冻结门槛见 [整合方案](docs/DELIVERED_CNN_INTEGRATION_PLAN.md)。所有网格政策仍进入
+`model_config_digest`，实际坐标由 `grid_id` 绑定。
+
+`publish_suffix_window()` 只对一组完整、formal、规范 ID、严格逐小时的帧做闭区间后缀提交。
+起点必须精确命中已有帧；它不会重建 RiskFrame，因此适合 +6 h 重规划复用同一 generation、
+as-of、模型摘要和 risk IDs。
+
 ## 当前风险基线
 
 风险由冰密集度/厚度/类型/冰缘/漂移、浪、流、风、温度、能见度和水位的简单归一化分量
@@ -119,5 +168,10 @@ min(5, floor(risk_score * 5) + 1)
   重建后可恢复 commit 且跨实例重复发布幂等，并由真实 clock authority 保证 seek 后旧 publish/get
   拒绝；A 恢复后 payload 篡改同样拒绝；
 - 上述数据和 source snapshot 都是可复核测试夹具。当前工作区唯一真实长窗 A bundle 是
-  历史 v1、旧走廊、9 类，不能创建正式 RunContext，因此尚未完成真实来源 A→B→C 验收；
+  历史 v1、旧走廊、9 类，不能创建正式 RunContext；新的完整 12 类 `DatasetBundle v2` 由
+  独立数据采集会话交付，在它通过接收门之前尚未完成真实来源 A→B→C 验收；
 - 当前规则仍是 `demo_unvalidated`，没有训练权重、真实风险标签或航次校准证据。
+
+外部 CNN 权重的存在不改变最后一条：它尚未集成，训练标签仍是旧 B 启发式风险，且没有独立
+验证。2026-08-14 长运行的时间线、最后成功制品和下一次运行规则见
+[orchestrator 事故复盘](../arctic_route_orchestrator/docs/INCIDENT_2026-08-14_LONG_INTEGRATION_RUN.md)。

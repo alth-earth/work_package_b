@@ -1,0 +1,116 @@
+{
+  "schema_version": "b.risk-build-configuration.v2",
+  "grid_config": {
+    "schema_version": "b.target-grid-policy.v1",
+    "crs": "EPSG:4326",
+    "latitude_step_degrees": 0.75,
+    "longitude_step_degrees": 2.2,
+    "shape_rule": "cover_bbox_endpoints_v1",
+    "continuous_method": "linear_v1",
+    "categorical_method": "nearest_v1"
+  },
+  "model_config": {
+    "schema_version": "b.demo-risk-model-config.v2",
+    "model_version": "demo_unvalidated_rule_baseline.v2",
+    "calibration_status": "demo_unvalidated",
+    "interval_minutes": 60,
+    "temporal_policy_version": "visible_supports_hourly_v2",
+    "formula_version": "deterministic_environment_components_v2",
+    "risk_level_policy": "c_equal_width_floor_v1",
+    "hard_mask_policy": "land_sea_mask_threshold_v2",
+    "unknown_policy": "nan_confidence_zero_v1",
+    "components": [
+      {
+        "component_id": "ice_concentration",
+        "weight": 0.24,
+        "transform": "identity",
+        "lower": 0.0,
+        "upper": 1.0
+      },
+      {
+        "component_id": "ice_thickness",
+        "weight": 0.14,
+        "transform": "identity",
+        "lower": 0.0,
+        "upper": 3.0
+      },
+      {
+        "component_id": "ice_type",
+        "weight": 0.05,
+        "transform": "identity",
+        "lower": 0.0,
+        "upper": 4.0
+      },
+      {
+        "component_id": "ice_edge",
+        "weight": 0.02,
+        "transform": "identity",
+        "lower": 0.0,
+        "upper": 1.0
+      },
+      {
+        "component_id": "ice_drift_speed",
+        "weight": 0.06,
+        "transform": "vector_magnitude",
+        "lower": 0.0,
+        "upper": 1.5
+      },
+      {
+        "component_id": "wave_height",
+        "weight": 0.13,
+        "transform": "identity",
+        "lower": 0.0,
+        "upper": 8.0
+      },
+      {
+        "component_id": "ocean_current_speed",
+        "weight": 0.07,
+        "transform": "vector_magnitude",
+        "lower": 0.0,
+        "upper": 2.0
+      },
+      {
+        "component_id": "wind_speed",
+        "weight": 0.1,
+        "transform": "vector_magnitude",
+        "lower": 0.0,
+        "upper": 30.0
+      },
+      {
+        "component_id": "freezing_deficit",
+        "weight": 0.05,
+        "transform": "inverse_linear",
+        "lower": 243.15,
+        "upper": 273.15
+      },
+      {
+        "component_id": "visibility_deficit",
+        "weight": 0.1,
+        "transform": "inverse_linear",
+        "lower": 0.0,
+        "upper": 10000.0
+      },
+      {
+        "component_id": "water_level_magnitude",
+        "weight": 0.04,
+        "transform": "absolute",
+        "lower": 0.0,
+        "upper": 3.0
+      }
+    ],
+    "quality_confidence": {
+      "good": 1.0,
+      "suspect": 0.75,
+      "degraded": 0.5
+    },
+    "temporal_method_confidence": {
+      "exact": 1.0,
+      "categorical_nearest": 0.85,
+      "linear_interpolation": 0.9,
+      "static": 1.0
+    },
+    "land_sea_mask_land_threshold": 0.5,
+    "speed_risk_coefficient": 0.55,
+    "minimum_speed_factor": 0.35
+  }
+}

@@ -13,7 +13,7 @@ from arctic_route_planning.contracts import (
     canonical_risk_frame_bytes,
     canonical_risk_id,
 )
-from arctic_route_planning.errors import ContextMismatchError
+from arctic_route_planning.errors import ContextMismatchError, RiskCoverageError
 
 from arctic_route_risk import (
     BInputEnvelope,
@@ -21,6 +21,7 @@ from arctic_route_risk import (
     PublicationConflictError,
     RiskBuildRequest,
     RiskBuildService,
+    RiskPipelineError,
     StaleGenerationError,
 )
 
@@ -73,6 +74,73 @@ def test_persistent_store_idempotently_commits_exact_window(tmp_path, formal_fix
     )
     with pytest.raises(ContextMismatchError):
         store.get_committed_window(newer_query)
+
+
+def test_publish_suffix_window_preserves_canonical_frame_identity(
+    tmp_path, formal_fixture
+) -> None:
+    frames = _built(formal_fixture)
+    store = PersistentRiskStore(tmp_path)
+    store.activate_generation(frames[0].run_id, frames[0].generation_id)
+
+    committed = store.publish_suffix_window(
+        frames,
+        start=frames[0].valid_time + timedelta(hours=1),
+    )
+
+    assert committed.start == frames[1].valid_time
+    assert committed.end == frames[-1].valid_time
+    assert committed.count == 2
+    assert tuple(frame.risk_id for frame in committed.frames) == tuple(
+        frame.risk_id for frame in frames[1:]
+    )
+    assert {frame.generation_id for frame in committed.frames} == {
+        frames[0].generation_id
+    }
+    assert {frame.as_of_time for frame in committed.frames} == {frames[0].as_of_time}
+
+
+def test_publish_suffix_window_requires_exact_hourly_boundary(
+    tmp_path, formal_fixture
+) -> None:
+    frames = _built(formal_fixture)
+    store = PersistentRiskStore(tmp_path)
+    store.activate_generation(frames[0].run_id, frames[0].generation_id)
+
+    with pytest.raises(RiskPipelineError, match="exactly match"):
+        store.publish_suffix_window(
+            frames,
+            start=frames[0].valid_time + timedelta(minutes=30),
+        )
+
+
+def test_publish_suffix_window_validates_complete_input_before_slicing(
+    tmp_path, formal_fixture
+) -> None:
+    frames = _built(formal_fixture)
+    store = PersistentRiskStore(tmp_path)
+    store.activate_generation(frames[0].run_id, frames[0].generation_id)
+
+    with pytest.raises(RiskCoverageError, match="frames 数量"):
+        store.publish_suffix_window(
+            (frames[0], frames[2]),
+            start=frames[2].valid_time,
+        )
+
+
+def test_publish_suffix_window_rejects_mixed_as_of(tmp_path, formal_fixture) -> None:
+    frames = list(_built(formal_fixture))
+    changed = replace(
+        frames[1],
+        as_of_time=frames[1].as_of_time + timedelta(hours=1),
+        risk_id="draft",
+    )
+    frames[1] = replace(changed, risk_id=canonical_risk_id(changed))
+    store = PersistentRiskStore(tmp_path)
+    store.activate_generation(frames[0].run_id, frames[0].generation_id)
+
+    with pytest.raises(PublicationConflictError, match="one exact as_of_time"):
+        store.publish_suffix_window(frames, start=frames[1].valid_time)
 
 
 def test_generation_fence_rejects_late_old_task_and_hides_old_commit(
