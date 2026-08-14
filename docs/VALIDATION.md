@@ -1,57 +1,64 @@
-# 验收与限制
+> [!NOTE]
+> **文档治理声明**
+> - 文件角色：正式工作包 B 的现行验证记录与验收边界。
+> - 改造时间：2026-08-14（Asia/Shanghai）。
+> - 原文件去向：[VALIDATION.archive-20260814-pre-governance.md](VALIDATION.archive-20260814-pre-governance.md)。
+> - 改造原因：以本次实测结果纠正旧计数，并分开正式路径和 CNN 可选后端证据。
 
-本包的自动门槛：
+# 正式工作包 B 验证记录
+
+## 2026-08-14 可复核结果
+
+在 `/root/my_project/work_package_b` 的现有有效 Mamba 前缀与锁定 uv 环境中执行：
+
+| 命令 | 结果 | 覆盖边界 |
+|---|---|---|
+| `make check` | 通过 | Ruff；40 个 unit/contract；8 个 integration；lock、sync、CLI help |
+| `make model-check` | 10 个通过 | 可选 CPU CNN 的装载、输入适配和单步后端检查 |
+| `git diff --check` | 通过 | 当时工作树的空白/补丁格式检查 |
+
+`make check` 的测试划分为 `40 passed, 18 deselected` 和
+`8 passed, 50 deselected`；`make model-check` 为 `10 passed, 48 deselected`。
+
+## CNN 整合边界
+
+`22_深度学习综合风险预测模型.zip` 已整合进当前 B 仓库的可选实验后端并完成 P1，但未完成
+P2 sidecar，且未进入 formal build / RiskFrame / store / C。
+
+因此，10 个模型测试只证明受控输入下的权重装载、适配和单步推理，不证明以下事项：
+
+- 不证明 CNN 是正式风险来源，也不证明其输出可写入正式 `PersistentRiskStore`；
+- 不证明单步模型具备 169 个逐小时有效时刻或任何已知预报间隔；
+- 不证明 CNN 结果已发送给 C；
+- 不证明模型科学有效、完成标定或适航认证。
+
+## 已验证与未验证矩阵
+
+| 能力 | 工程状态 | 验收结论 |
+|---|---|---|
+| A v2 公共对象校验、时间/上下文绑定 | 自动测试覆盖 | 工程基线通过 |
+| `bc.risk-frame.v2` 编解码与正式存储约束 | 自动测试覆盖 | 工程基线通过 |
+| fixture A→B→C 窗口消费 | 8 个 integration 通过 | 仅受控 fixture |
+| A 真实发布物全链路回放 | 未在本次验证中完成 | 待验收 |
+| 规则风险科学标定 | 未完成 | `demo_unvalidated` |
+| CNN P1 可选单步后端 | 10 个 model 测试通过 | 实验能力通过 |
+| CNN P2 sidecar / P3 多时效 / P4 正式接入 | 未实现 | 不得宣称交付 |
+
+## 复核命令
 
 ```bash
-make lint
-make test
-make integration
+cd /root/my_project/work_package_b
 make check
-make model-check  # 可选 CPU extra；不进入正式 RiskFrame
-git diff --check
+make model-check
 ```
 
-单元/合同测试覆盖身份串线、future issue、旧 generation、缺帧、逐小时连续性、缺测不填零、
-C Schema/codec、risk ID、幂等与冲突发布、发布中途调用方 xarray 变异隔离、
-active-generation fence、同/跨 run 并发 execution lease、同 run 代次切换等待、committed query
-精确匹配，以及 attestation 后 payload/坐标篡改和外部数组别名隔离。
-版本化 JSON 配置也必须严格解析并与实际默认运行对象/摘要一致。
-0.2.0 进一步枚举测试 11 个分量的每项权重/上下界、全部质量/时间置信度、陆地阈值、速度
-系数和最低因子：每个有效数值变化都必须改变 `model_config_digest`。默认 v2 配置与 0.1.0
-风险、hard mask、confidence、speed factor 做逐数组比较；缺/额外字段、非法 transform、范围
-和置信度均有负例。
+若重新创建环境，先执行 `make env-create && make sync`；模型检查前执行 `make model-sync`。
+任何环境、锁文件或上游版本变化都需要重新记录日期、解释器、命令和完整结果。
 
-跨包测试使用实际公共 API 验证：
+## 关联资料
 
-- A `prepare_window_for_b()` → shared bundle/RunContext → B 逐小时窗口/store → C
-  `RiskSourcePlanningIngress` → formal RoutePlan；
-- 96/168/216 h 分别输出 97/169/217 帧；主/迁移走廊复用相同
-  `model_config_digest`；
-- A 通过 `AcquisitionPublisher` 落盘 12 类和不可变 source snapshot，进程重启后仅通过
-  `resolve_dataset_bundle_for_b()` 恢复，随后进入 B；B 发布后重建 `PersistentRiskStore`，验证
-  committed window 可恢复且相同窗口跨实例重复发布幂等。该恢复路径通过真实
-  `SimulationClock`/`bind_generation_authority()` 驱动，seek 后旧代次 publish/get 均 fail closed；
-  A 恢复 payload 被改写时同样 fail closed。
-- B 对完整 formal 小时序列可提交精确 +6 h suffix window；测试固定其 risk IDs、generation、
-  as-of 不变，并拒绝非帧边界起点和在截取前就存在缺帧的“完整”输入。
-- 纬向 0.75°、经向 2.2° 的 fast smoke 候选通过 C 公共端点映射验证：主走廊与迁移走廊完整
-  `data_bbox` 的 start/destination allowed region 均含可航节点，调整距离不超过显式 150 km；
-  不以扩大业务允许区绕过失败。该测试使用空 hard mask，只证明端点/连通性几何；不证明真实
-  land mask、路线保真或可接受全链耗时，也不把该值冻结为 formal 默认。
-
-这些集成数据是正式形状和 provenance 规则下的**测试夹具**，不是公开源下载结果。当前真实 A
-长窗仍是历史 v1/9 类/旧 corridor，故测试通过只证明工程合同闭环，不证明实源闭环或科学正确性。
-
-2026-08-13 的 0.2.0 `make check` 结果：Ruff 通过；单元/合同
-`40 passed, 7 deselected`；跨包集成 `7 passed, 40 deselected`；uv lock/sync 检查和 CLI help
-通过。本版本验收还执行 `git diff --check`，不得引用 0.1.0 的历史计数代替当前证据。
-
-2026-08-14 的长集成尝试在 0.75°×2.2°/11×26 下完成 A 夹具 bundle、B 169 帧 full commit、
-C v2 初始三目标和 163 帧 suffix commit；初始三目标约 27 分钟，重规划未形成 output，v3 未开始。
-这不是 `make check` 通过证据。复盘见
-[orchestrator incident](../../arctic_route_orchestrator/docs/INCIDENT_2026-08-14_LONG_INTEGRATION_RUN.md)。
-
-尚未宣称完成的科学项：真实风险标签、船型校准、风浪流相对航向、净水深规则、限制区法律规则、
-Q50/Q90/概率预测和真实航次回放。新 CNN 已完成固定哈希、weights-only CPU 接收、safetensors
-转换和单步短测（`make model-check`：10 passed），但仍缺独立验证、明确 cadence 和 formal 输入
-输出；因此不能称为完成的逐小时预测能力。当前系统只能称科研演示闭环。
+- [正式入口](../README.md)
+- [CNN 分阶段整合计划](DELIVERED_CNN_INTEGRATION_PLAN.md)
+- [CNN 模型审计](DELIVERED_CNN_MODEL_AUDIT.md)
+- [唯一总交接入口](../../work_package_b_handoff/work_package_b_handoff.md)
+- [系统架构](../../ARCTIC_ROUTE_SYSTEM.md)
