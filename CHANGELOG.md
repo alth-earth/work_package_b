@@ -6,6 +6,13 @@
 
 ## Unreleased
 
+- Added a formal, auditable one-hour training-sample protocol for B RiskFrame
+  outputs, including deterministic temporal holdout splitting, persistence
+  baseline evaluation, readiness reporting and sample-manifest metadata.
+- Documented the formal model-training boundary: the legacy CNN remains
+  `experimental_unverified`; formal training must use time-aware RiskFrame v2
+  samples and must not promote undefined single-step outputs into the C path.
+
 - 收到并静态审计外部 `22_深度学习综合风险预测模型.zip`：权重存在，但只支持旧 B 单通道
   综合风险的未知步长单步输出，状态为 `experimental_unverified`。新增模型卡、隔离后端整合
   方案和续开发 Handoff。

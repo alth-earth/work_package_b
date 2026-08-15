@@ -30,8 +30,18 @@ from arctic_route_risk.modeling import (
     RiskModelBackend,
     RiskModelInput,
     RiskModelOutput,
+    RiskTrainingEvaluation,
+    RiskTrainingReadiness,
+    RiskTrainingSample,
+    RiskTrainingSplit,
     RuleBaselineBackend,
+    build_one_hour_training_samples,
+    evaluate_persistence_baseline,
     intake_legacy_cnn_zip,
+    iter_training_sample_documents,
+    readiness_as_dict,
+    summarize_training_readiness,
+    temporal_holdout_split,
 )
 from arctic_route_risk.publishing import PersistentRiskStore
 from arctic_route_risk.service import RiskBuildRequest, RiskBuildService
@@ -61,13 +71,23 @@ __all__ = [
     "RiskModelInput",
     "RiskModelOutput",
     "RiskPipelineError",
+    "RiskTrainingEvaluation",
+    "RiskTrainingReadiness",
+    "RiskTrainingSample",
+    "RiskTrainingSplit",
     "RuleBaselineBackend",
     "StaleGenerationError",
     "TargetGridConfig",
     "TemporalMethodConfidenceConfig",
+    "build_one_hour_training_samples",
+    "evaluate_persistence_baseline",
     "intake_legacy_cnn_zip",
+    "iter_training_sample_documents",
     "load_risk_build_configuration",
     "model_config_digest",
+    "readiness_as_dict",
+    "summarize_training_readiness",
+    "temporal_holdout_split",
 ]
 
 __version__ = "0.2.0"
