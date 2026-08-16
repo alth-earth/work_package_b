@@ -100,3 +100,39 @@ Work Package C should not treat them as the formal risk source. For route
 planning, C should continue to use the comprehensive formal `RiskFrame` stream.
 Single-factor layers are useful for explaining why a risk field looks the way it
 does, checking latest source status, and producing factor-specific maps.
+
+## Final handoff confirmation
+
+This feature was added on the `工作包B` branch as a lightweight single-factor
+output path. The implementation deliberately preserves the existing formal
+Work Package B responsibilities:
+
+- The comprehensive multi-hour B -> C `RiskFrame` pipeline is unchanged.
+- The rule-baseline and model-training protocol remain the formal planning
+  path.
+- Single-factor outputs are latest-available realtime layers for display and
+  review only.
+- Each factor selects its own latest valid time from verified A input data; it
+  does not fabricate 24 h, 72 h, or full-route horizons.
+- The outputs are processed risk products, not raw downloaded official data.
+- The public entry points are exported from `arctic_route_risk` so downstream
+  code can import them without relying on private file paths.
+
+The files added or updated for this handoff are:
+
+- `src/arctic_route_risk/single_factor.py`
+- `tests/unit/test_single_factor.py`
+- `docs/SINGLE_FACTOR_REALTIME.md`
+- `src/arctic_route_risk/__init__.py`
+- `pyproject.toml`
+- `CHANGELOG.md`
+
+The latest verified test result after merging the upstream Work Package B
+changes was:
+
+```text
+65 passed
+```
+
+The branch also includes the latest available upstream `alth-earth/work_package_b`
+changes at the time of handoff. No merge into `main` was performed.
