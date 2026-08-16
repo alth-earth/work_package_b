@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -12,7 +11,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from threading import RLock
+from threading import Condition, RLock
 from typing import Any, Protocol
 
 from arctic_route_planning.contracts import (
@@ -33,6 +32,45 @@ from arctic_route_risk.errors import (
     RiskPipelineError,
     StaleGenerationError,
 )
+
+try:  # pragma: no cover - platform branch is covered by the host OS.
+    import fcntl
+except ModuleNotFoundError:  # pragma: no cover - exercised on Windows.
+    fcntl = None
+    import msvcrt
+
+
+class _WindowsReadWriteLock:
+    def __init__(self) -> None:
+        self._lock = RLock()
+        self._condition = Condition(self._lock)
+        self._readers = 0
+        self._writer = False
+
+    @contextmanager
+    def acquire(self, *, exclusive: bool) -> Iterator[None]:
+        with self._condition:
+            if exclusive:
+                while self._writer or self._readers:
+                    self._condition.wait()
+                self._writer = True
+            else:
+                while self._writer:
+                    self._condition.wait()
+                self._readers += 1
+        try:
+            yield
+        finally:
+            with self._condition:
+                if exclusive:
+                    self._writer = False
+                else:
+                    self._readers -= 1
+                self._condition.notify_all()
+
+
+_WINDOWS_RUN_LOCKS_GUARD = RLock()
+_WINDOWS_RUN_LOCKS: dict[str, _WindowsReadWriteLock] = {}
 
 
 class _GenerationSnapshot(Protocol):
@@ -453,22 +491,53 @@ class PersistentRiskStore:
         _validate_run_id(run_id)
         lock_digest = hashlib.sha256(run_id.encode("utf-8")).hexdigest()
         lock_path = self._run_locks / f"{lock_digest}.lock"
-        operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+        if fcntl is None:
+            with _windows_run_lock(lock_path).acquire(exclusive=exclusive):
+                yield
+            return
         with lock_path.open("a+b") as handle:
-            fcntl.flock(handle.fileno(), operation)
+            _lock_file(handle, exclusive=exclusive)
             try:
                 yield
             finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                _unlock_file(handle)
 
     @contextmanager
     def _store_write_locked(self) -> Iterator[None]:
         with self._lock_path.open("a+b") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            _lock_file(handle, exclusive=True)
             try:
                 yield
             finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                _unlock_file(handle)
+
+
+def _lock_file(handle: Any, *, exclusive: bool) -> None:
+    if fcntl is not None:
+        operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+        fcntl.flock(handle.fileno(), operation)
+        return
+    handle.seek(0)
+    mode = msvcrt.LK_LOCK if exclusive else msvcrt.LK_RLCK
+    msvcrt.locking(handle.fileno(), mode, 1)
+
+
+def _unlock_file(handle: Any) -> None:
+    if fcntl is not None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        return
+    handle.seek(0)
+    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+
+def _windows_run_lock(path: Path) -> _WindowsReadWriteLock:
+    key = str(path.resolve())
+    with _WINDOWS_RUN_LOCKS_GUARD:
+        lock = _WINDOWS_RUN_LOCKS.get(key)
+        if lock is None:
+            lock = _WindowsReadWriteLock()
+            _WINDOWS_RUN_LOCKS[key] = lock
+        return lock
 
 
 def _commit_document(window: CommittedRiskWindow) -> dict[str, Any]:
@@ -608,6 +677,8 @@ def _atomic_replace(path: Path, payload: bytes) -> None:
 
 
 def _fsync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
     descriptor = os.open(path, os.O_RDONLY)
     try:
         os.fsync(descriptor)
