@@ -32,6 +32,10 @@ model-cpu = [
     "safetensors>=0.8,<0.9",
     "torch>=2.13,<2.14",
 ]
+single-factor-output = [
+    "h5netcdf>=1.6,<2",
+    "matplotlib>=3.10,<4",
+]
 
 [dependency-groups]
 dev = [

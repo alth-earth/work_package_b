@@ -6,6 +6,10 @@
 
 ## Unreleased
 
+- Added realtime single-factor risk outputs for situation awareness and review:
+  each factor now selects its own latest visible valid time, exports processed
+  normalized risk data, and stays explicitly outside the formal B-to-C planning
+  contract.
 - Added a formal, auditable one-hour training-sample protocol for B RiskFrame
   outputs, including deterministic temporal holdout splitting, persistence
   baseline evaluation, readiness reporting and sample-manifest metadata.
