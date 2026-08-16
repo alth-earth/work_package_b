@@ -14,6 +14,11 @@
 - `hard_mask` 当前仅为 `land_sea_mask < land_sea_mask_land_threshold` 或该分类本身未知；默认
   阈值为 0.5。风险分量缺测但陆海分类有效时，
   仍通过 `risk_score=NaN`、`confidence=0` 和 `risk_level=5` fail closed，不误称安全。
+
+RC1 起配置可选用 `hard_mask_policy=land_sea_mask_plus_unknown_v1`：在陆海掩膜之外，把
+“任一必需风险输入非全有限”的节点一并置 hard（不可规划）。语义仍是 unknown→unavailable，
+不是 unknown→safe；风险/置信度/risk_level 的 fail-closed 表达不变。长期建议区分
+`physically_non_navigable` 与 `planning_unavailable_due_to_unknown`（POST-RC1）。
 - `confidence` 取实际支撑来源质量下界，再乘配置中的 exact、categorical-nearest、linear 或
   static 时间方法因子。
 - `environment_speed_factor = clip(1 - speed_risk_coefficient*risk,

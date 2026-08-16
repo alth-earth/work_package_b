@@ -6,6 +6,14 @@
 
 ## Unreleased
 
+### 2026-08-16（RC1）
+
+- 新增 `hard_mask_policy=land_sea_mask_plus_unknown_v1`：风险输入非全有限的 planning
+  节点置 hard（unknown→不可规划；risk 仍 NaN/confidence 0，fail-closed 不变）；
+  smoke grid v4 启用该策略；新增 4 项策略单元测试（全量 43 unit tests 通过）。
+- RC1 实源风险窗：mur/dikson 145 帧 committed window 已由 orchestrator r6/r7 消费，
+  unknown-navigable = 0。
+
 - 收到并静态审计外部 `22_深度学习综合风险预测模型.zip`：权重存在，但只支持旧 B 单通道
   综合风险的未知步长单步输出，状态为 `experimental_unverified`。新增模型卡、隔离后端整合
   方案和续开发 Handoff。

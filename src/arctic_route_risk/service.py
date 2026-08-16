@@ -405,6 +405,10 @@ def _demo_unvalidated_risk(
         land_sea < model_config.land_sea_mask_land_threshold
     )
     valid &= np.isfinite(land_sea)
+    if model_config.hard_mask_policy == "land_sea_mask_plus_unknown_v1":
+        # Conservative fail-closed rule: planning nodes whose risk inputs are
+        # not fully finite are unavailable (hard), never treated as safe.
+        hard = hard | (~valid)
     risk = np.where(valid, np.clip(risk, 0.0, 1.0), np.nan)
     confidence = np.where(valid, source_confidence, 0.0)
     speed = np.where(

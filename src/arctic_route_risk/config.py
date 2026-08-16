@@ -231,11 +231,15 @@ class DemoRiskModelConfig:
             "temporal_policy_version": "visible_supports_hourly_v2",
             "formula_version": "deterministic_environment_components_v2",
             "risk_level_policy": "c_equal_width_floor_v1",
-            "hard_mask_policy": "land_sea_mask_threshold_v2",
             "unknown_policy": "nan_confidence_zero_v1",
         }
         if any(getattr(self, name) != value for name, value in expected_policies.items()):
             raise RiskPipelineError("unsupported demo risk model policy")
+        if self.hard_mask_policy not in {
+            "land_sea_mask_threshold_v2",
+            "land_sea_mask_plus_unknown_v1",
+        }:
+            raise RiskPipelineError("unsupported hard_mask_policy")
         if self.calibration_status != "demo_unvalidated":
             raise RiskPipelineError("demo baseline cannot claim calibration")
         if isinstance(self.interval_minutes, bool) or self.interval_minutes != 60:

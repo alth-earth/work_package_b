@@ -19,7 +19,9 @@
 | 正式规则风险流水线 | 已实现、待真实源与科学评审 | `make check`：40 个 unit/contract + 8 个 integration 测试通过 |
 | 旧 CNN 可选后端 P1 | 已实现、仅显式启用 | `make model-check`：10 个 model 测试通过 |
 | CNN P2 sidecar 影子运行 | 未实现 | 不得描述为已接入正式流水线 |
-| 真实 A→B→C 全链路与风险标定 | 未完成 | 当前集成测试使用受控 fixture |
+| 真实 A→B→C→D 全链路（Demo RC1） | 已跑通（orchestrator r6/r7，v3 四层+6h 重规划） | 见 `../work_package_a/data/output/golden/mur-v3-smoke-20260816-r6/r7/output/` |
+| RC1 hard-mask 策略 | `land_sea_mask_plus_unknown_v1`（source-unknown → hard） | B 风险帧 145 帧 unknown-navigable=0 |
+| 科学/真船风险标定 | 未完成（非 RC1 门槛） | 见 [风险基线](docs/RISK_MODEL.md) |
 
 统一事实口径：`22_深度学习综合风险预测模型.zip` 已整合进当前 B 仓库的可选实验后端并完成
 P1，但未完成 P2 sidecar，且未进入 formal build / RiskFrame / store / C。
