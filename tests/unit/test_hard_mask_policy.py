@@ -91,7 +91,7 @@ def test_ice_free_neutral_fill_only_fills_ice_type_and_edge() -> None:
         "ice_type": np.array([[np.nan, np.nan], [np.nan, 2.0]]),
         "ice_edge": np.array([[np.nan, np.nan], [np.nan, 1.0]]),
     }
-    filled = _apply_ice_free_neutral_fill(values)
+    filled, counts = _apply_ice_free_neutral_fill(values)
 
     # ice-free cells (0.0) get neutral 0.0
     assert filled["ice_type"][0, 0] == 0.0
@@ -103,6 +103,32 @@ def test_ice_free_neutral_fill_only_fills_ice_type_and_edge() -> None:
     # existing finite value is preserved
     assert filled["ice_type"][1, 1] == 2.0
     assert filled["ice_edge"][1, 1] == 1.0
+    assert counts == {"ice_type": 1, "ice_edge": 1}
+
+
+def test_ice_free_predicate_boundary_and_fail_closed() -> None:
+    concentration = np.array([[0.149, 0.150, 0.151], [np.nan, -0.1, 0.0]])
+    values = {
+        "ice_concentration": concentration,
+        "ice_type": np.full(concentration.shape, np.nan),
+        "ice_edge": np.full(concentration.shape, np.nan),
+    }
+    filled, counts = _apply_ice_free_neutral_fill(values)
+
+    # strictly below threshold and non-negative -> neutralised
+    assert filled["ice_type"][0, 0] == 0.0
+    assert filled["ice_edge"][0, 0] == 0.0
+    assert filled["ice_type"][1, 2] == 0.0
+    # exactly at threshold is ice, not open water -> NOT neutralised
+    assert np.isnan(filled["ice_type"][0, 1])
+    assert np.isnan(filled["ice_edge"][0, 1])
+    # above threshold -> NOT neutralised
+    assert np.isnan(filled["ice_type"][0, 2])
+    # concentration NaN cannot prove open water -> fail-closed
+    assert np.isnan(filled["ice_type"][1, 0])
+    # negative concentration is invalid evidence -> fail-closed
+    assert np.isnan(filled["ice_type"][1, 1])
+    assert counts == {"ice_type": 2, "ice_edge": 2}
 
 
 def test_ice_free_policy_marks_true_unknown_hard_but_ice_free_navigable() -> None:
@@ -127,7 +153,7 @@ def test_ice_free_policy_marks_true_unknown_hard_but_ice_free_navigable() -> Non
     model = DemoRiskModelConfig(
         hard_mask_policy="land_sea_mask_plus_unknown_ice_free_v1"
     )
-    filled = _apply_ice_free_neutral_fill(values)
+    filled, _ = _apply_ice_free_neutral_fill(values)
     risk, hard, confidence, _, reason = _demo_unvalidated_risk(
         values=filled,
         source_confidence=1.0,

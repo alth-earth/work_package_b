@@ -9,6 +9,9 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 import xarray as xr
 from arctic_route_data import StandardDataFrame
+from arctic_route_data.derivations import (
+    ICE_EDGE_CONCENTRATION_THRESHOLD as ICE_FREE_CONCENTRATION_THRESHOLD,
+)
 from arctic_route_planning.contracts import (
     ProvenanceKind,
     RiskFrame,
@@ -42,7 +45,6 @@ _VARIABLES: dict[str, tuple[str, ...]] = {
 _CATEGORICAL = frozenset({"sea_ice_type", "sea_ice_edge"})
 _STATIC = frozenset({"land_sea_mask"})
 _SPATIAL_NEAREST = _CATEGORICAL | _STATIC
-ICE_FREE_CONCENTRATION_THRESHOLD = 0.15
 _COMPONENT_INPUTS: dict[str, tuple[str, ...]] = {
     "ice_concentration": ("ice_concentration",),
     "ice_thickness": ("ice_thickness",),
@@ -152,7 +154,12 @@ class RiskBuildService:
             request.model_config.hard_mask_policy
             == "land_sea_mask_plus_unknown_ice_free_v1"
         ):
-            arrays = _apply_ice_free_neutral_fill(arrays)
+            arrays, ice_free_neutralized_counts = _apply_ice_free_neutral_fill(arrays)
+        else:
+            ice_free_neutralized_counts = {
+                "ice_type": 0,
+                "ice_edge": 0,
+            }
         risk, hard, confidence, speed_factor, reason = _demo_unvalidated_risk(
             arrays,
             source_confidence=min(field.confidence for field in resolved.values()),
@@ -187,6 +194,17 @@ class RiskBuildService:
                 "temporal_policy": request.model_config.temporal_policy_version,
                 "hard_mask_policy": request.model_config.hard_mask_policy,
                 "missing_input_variable_counts": missing_input_variable_counts,
+                "ice_free_neutralized_input_counts": ice_free_neutralized_counts,
+                "ice_free_predicate": {
+                    "variable": "ice_concentration",
+                    "operator": "<",
+                    "threshold": ICE_FREE_CONCENTRATION_THRESHOLD,
+                    "source": "arctic_route_data.derivations.ICE_EDGE_CONCENTRATION_THRESHOLD",
+                    "semantics": (
+                        "open water per A ice-type/edge derivation; "
+                        "ice_type/ice_edge are not-applicable in open water"
+                    ),
+                },
                 "dataset_bundle_id": envelope.dataset_bundle.bundle_id,
                 "dataset_bundle_digest": envelope.dataset_bundle.bundle_digest,
             },
@@ -477,27 +495,33 @@ def _hard_reason_values(
 
 def _apply_ice_free_neutral_fill(
     values: dict[str, np.ndarray],
-) -> dict[str, np.ndarray]:
-    """Neutralise NEXTsim ice type/edge where the ocean is ice-free.
+) -> tuple[dict[str, np.ndarray], dict[str, int]]:
+    """Neutralise NEXTsim ice type/edge where a trusted input proves open water.
 
-    NEXTsim masks ice type and ice edge over ice-free water (native NaN), which
-    is physically meaningful: no ice implies no ice type and no ice edge.  When
-    TOPAZ ice concentration is finite and at or below the ice-edge threshold,
-    those NaN cells are filled with 0.0 (zero risk contribution) instead of
-    being treated as missing data.  Cells where concentration itself is unknown
-    remain NaN and stay fail-closed.
+    ``ice_type`` and ``ice_edge`` are NOT_APPLICABLE in open water, not unknown.
+    The trusted predicate is a finite, physically valid sea-ice concentration
+    in ``[0, threshold)`` (project authority: A's
+    ``ICE_EDGE_CONCENTRATION_THRESHOLD``, used by ``derive_sea_ice_type`` /
+    ``derive_sea_ice_edge``).  NaN, negative, or above-threshold concentration
+    cannot prove open water and stays fail-closed.  Only NEXTsim-NaN cells are
+    neutralised to 0.0 (zero risk contribution); finite values are preserved.
+    Returns updated arrays and per-variable neutralised counts for provenance.
     """
 
     concentration = values["ice_concentration"]
-    ice_free = np.isfinite(concentration) & (
-        concentration <= ICE_FREE_CONCENTRATION_THRESHOLD
+    ice_free = (
+        np.isfinite(concentration)
+        & (concentration >= 0.0)
+        & (concentration < ICE_FREE_CONCENTRATION_THRESHOLD)
     )
+    neutralized_counts: dict[str, int] = {}
     for name in ("ice_type", "ice_edge"):
         array = values[name]
         fill = ice_free & ~np.isfinite(array)
+        neutralized_counts[name] = int(np.count_nonzero(fill))
         if np.any(fill):
             values[name] = np.where(fill, 0.0, array)
-    return values
+    return values, neutralized_counts
 
 
 def _risk_component(
