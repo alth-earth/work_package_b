@@ -32,20 +32,21 @@ def _base_values() -> dict[str, np.ndarray]:
 def test_default_policy_keeps_unknown_navigable() -> None:
     values = _base_values()
     values["ocean_current_u"][0, 0] = np.nan
-    risk, hard, _, _ = _demo_unvalidated_risk(
+    risk, hard, _, _, reason = _demo_unvalidated_risk(
         values=values,
         source_confidence=1.0,
         model_config=DemoRiskModelConfig(),
     )
     assert np.isnan(risk[0, 0])
     assert not hard[0, 0]
+    assert reason[0, 0] == "NONE"
 
 
 def test_plus_unknown_policy_marks_unknown_node_hard() -> None:
     values = _base_values()
     values["ocean_current_u"][0, 0] = np.nan
     model = DemoRiskModelConfig(hard_mask_policy="land_sea_mask_plus_unknown_v1")
-    risk, hard, confidence, _ = _demo_unvalidated_risk(
+    risk, hard, confidence, _, reason = _demo_unvalidated_risk(
         values=values,
         source_confidence=1.0,
         model_config=model,
@@ -53,20 +54,23 @@ def test_plus_unknown_policy_marks_unknown_node_hard() -> None:
     assert np.isnan(risk[0, 0])
     assert hard[0, 0]
     assert confidence[0, 0] == 0.0
+    assert reason[0, 0] == "DATA_UNAVAILABLE"
     # finite neighbor stays navigable
     assert not hard[0, 1]
+    assert reason[0, 1] == "NONE"
 
 
 def test_plus_unknown_policy_keeps_land_hard() -> None:
     values = _base_values()
     values["land_sea_mask"][1, 1] = 0.0  # land
     model = DemoRiskModelConfig(hard_mask_policy="land_sea_mask_plus_unknown_v1")
-    _, hard, _, _ = _demo_unvalidated_risk(
+    _, hard, _, _, reason = _demo_unvalidated_risk(
         values=values,
         source_confidence=1.0,
         model_config=model,
     )
     assert hard[1, 1]
+    assert reason[1, 1] == "LAND"
 
 
 def test_unsupported_policy_rejected() -> None:

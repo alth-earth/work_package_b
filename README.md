@@ -21,6 +21,7 @@
 | CNN P2 sidecar 影子运行 | 未实现 | 不得描述为已接入正式流水线 |
 | 真实 A→B→C→D 全链路（Demo RC1） | 已跑通（orchestrator r6/r7，v3 四层+6h 重规划） | 见 `../work_package_a/data/output/golden/mur-v3-smoke-20260816-r6/r7/output/` |
 | RC1 hard-mask 策略 | `land_sea_mask_plus_unknown_v1`（source-unknown → hard） | B 风险帧 145 帧 unknown-navigable=0 |
+| RC2 hard_reason | `hard_reason`（NONE/LAND/DATA_UNAVAILABLE/OTHER）+ `missing_input_variable_counts` | 每格原因可解释；hard_mask/fail-closed 不变（RC2 分支） |
 | 科学/真船风险标定 | 未完成（非 RC1 门槛） | 见 [风险基线](docs/RISK_MODEL.md) |
 
 统一事实口径：`22_深度学习综合风险预测模型.zip` 已整合进当前 B 仓库的可选实验后端并完成

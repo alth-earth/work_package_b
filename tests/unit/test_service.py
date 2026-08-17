@@ -176,13 +176,19 @@ def test_v2_default_preserves_v1_baseline_arrays() -> None:
 
     for expected, observed in zip(
         (expected_risk, expected_hard, expected_confidence, expected_speed),
-        actual,
+        actual[:4],
         strict=True,
     ):
         np.testing.assert_array_equal(
             np.asarray(expected).astype(np.float32),
             np.asarray(observed).astype(np.float32),
         )
+    expected_reason = np.where(
+        expected_hard,
+        "LAND",
+        "NONE",
+    ).astype("U32")
+    np.testing.assert_array_equal(actual[4], expected_reason)
 
 
 def test_v2_runtime_uses_configured_confidence_mask_and_speed_policies(

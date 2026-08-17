@@ -431,7 +431,7 @@ class RuleBaselineBackend:
             raise model_error(
                 MODEL_INPUT_INCOMPATIBLE, "rule baseline variables do not share the input grid"
             )
-        risk, _, _, _ = _demo_unvalidated_risk(
+        risk, _, _, _, _ = _demo_unvalidated_risk(
             values,
             source_confidence=1.0,
             model_config=self.model_config,

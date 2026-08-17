@@ -126,7 +126,7 @@ def test_rule_adapter_matches_existing_rule_array() -> None:
     latitude = np.array([70.0, 70.1])
     longitude = np.array([30.0, 30.1, 30.2])
     model_input = RiskModelInput(variables=values, latitude=latitude, longitude=longitude)
-    expected, _, _, _ = _demo_unvalidated_risk(
+    expected, _, _, _, _ = _demo_unvalidated_risk(
         values,
         source_confidence=1.0,
         model_config=RuleBaselineBackend().model_config,

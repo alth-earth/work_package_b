@@ -147,11 +147,16 @@ class RiskBuildService:
             for field in resolved.values()
             for variable, values in field.variables.items()
         }
-        risk, hard, confidence, speed_factor = _demo_unvalidated_risk(
+        risk, hard, confidence, speed_factor, reason = _demo_unvalidated_risk(
             arrays,
             source_confidence=min(field.confidence for field in resolved.values()),
             model_config=request.model_config,
         )
+        missing_input_variable_counts = {
+            variable: int(np.count_nonzero(~np.isfinite(values)))
+            for field in resolved.values()
+            for variable, values in field.variables.items()
+        }
         level = np.full(risk.shape, 5, dtype=np.uint8)
         finite = np.isfinite(risk)
         level[finite] = np.clip(np.floor(risk[finite] * 5) + 1, 1, 5).astype(np.uint8)
@@ -165,6 +170,7 @@ class RiskBuildService:
                     ("latitude", "longitude"),
                     speed_factor.astype(np.float32),
                 ),
+                "hard_reason": (("latitude", "longitude"), reason.astype(np.str_)),
             },
             coords={"latitude": latitude, "longitude": longitude},
             attrs={
@@ -175,6 +181,7 @@ class RiskBuildService:
                 "risk_formula": request.model_config.formula_version,
                 "temporal_policy": request.model_config.temporal_policy_version,
                 "hard_mask_policy": request.model_config.hard_mask_policy,
+                "missing_input_variable_counts": missing_input_variable_counts,
                 "dataset_bundle_id": envelope.dataset_bundle.bundle_id,
                 "dataset_bundle_digest": envelope.dataset_bundle.bundle_digest,
             },
@@ -390,7 +397,7 @@ def _demo_unvalidated_risk(
     *,
     source_confidence: float,
     model_config: DemoRiskModelConfig,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     components = tuple(
         (
             component.weight,
@@ -420,7 +427,41 @@ def _demo_unvalidated_risk(
         ),
         model_config.minimum_speed_factor,
     )
-    return risk, hard, confidence, speed
+    reason = _hard_reason_values(
+        values=values,
+        hard=hard,
+        valid=valid,
+        model_config=model_config,
+    )
+    return risk, hard, confidence, speed, reason
+
+
+def _hard_reason_values(
+    *,
+    values: dict[str, np.ndarray],
+    hard: np.ndarray,
+    valid: np.ndarray,
+    model_config: DemoRiskModelConfig,
+) -> np.ndarray:
+    """Return per-cell hard reason with documented precedence.
+
+    Precedence: physical land first, then data-unavailable under the
+    ``land_sea_mask_plus_unknown_v1`` policy, then OTHER for any remaining
+    unexplained hard cell.  Non-hard cells always read ``NONE``.
+    """
+
+    land_sea = values["land_sea_mask"]
+    land = ~np.isfinite(land_sea) | (
+        land_sea < model_config.land_sea_mask_land_threshold
+    )
+    reason = np.full(hard.shape, "NONE", dtype="U32")
+    reason[land] = "LAND"
+    if model_config.hard_mask_policy == "land_sea_mask_plus_unknown_v1":
+        reason[(~valid) & (~land)] = "DATA_UNAVAILABLE"
+    unexplained = hard & (reason == "NONE")
+    reason[unexplained] = "OTHER"
+    reason[~hard] = "NONE"
+    return reason
 
 
 def _risk_component(
