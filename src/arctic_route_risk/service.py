@@ -42,6 +42,7 @@ _VARIABLES: dict[str, tuple[str, ...]] = {
 _CATEGORICAL = frozenset({"sea_ice_type", "sea_ice_edge"})
 _STATIC = frozenset({"land_sea_mask"})
 _SPATIAL_NEAREST = _CATEGORICAL | _STATIC
+ICE_FREE_CONCENTRATION_THRESHOLD = 0.15
 _COMPONENT_INPUTS: dict[str, tuple[str, ...]] = {
     "ice_concentration": ("ice_concentration",),
     "ice_thickness": ("ice_thickness",),
@@ -147,6 +148,11 @@ class RiskBuildService:
             for field in resolved.values()
             for variable, values in field.variables.items()
         }
+        if (
+            request.model_config.hard_mask_policy
+            == "land_sea_mask_plus_unknown_ice_free_v1"
+        ):
+            arrays = _apply_ice_free_neutral_fill(arrays)
         risk, hard, confidence, speed_factor, reason = _demo_unvalidated_risk(
             arrays,
             source_confidence=min(field.confidence for field in resolved.values()),
@@ -154,8 +160,7 @@ class RiskBuildService:
         )
         missing_input_variable_counts = {
             variable: int(np.count_nonzero(~np.isfinite(values)))
-            for field in resolved.values()
-            for variable, values in field.variables.items()
+            for variable, values in arrays.items()
         }
         level = np.full(risk.shape, 5, dtype=np.uint8)
         finite = np.isfinite(risk)
@@ -412,7 +417,10 @@ def _demo_unvalidated_risk(
         land_sea < model_config.land_sea_mask_land_threshold
     )
     valid &= np.isfinite(land_sea)
-    if model_config.hard_mask_policy == "land_sea_mask_plus_unknown_v1":
+    if model_config.hard_mask_policy in {
+        "land_sea_mask_plus_unknown_v1",
+        "land_sea_mask_plus_unknown_ice_free_v1",
+    }:
         # Conservative fail-closed rule: planning nodes whose risk inputs are
         # not fully finite are unavailable (hard), never treated as safe.
         hard = hard | (~valid)
@@ -456,12 +464,40 @@ def _hard_reason_values(
     )
     reason = np.full(hard.shape, "NONE", dtype="U32")
     reason[land] = "LAND"
-    if model_config.hard_mask_policy == "land_sea_mask_plus_unknown_v1":
+    if model_config.hard_mask_policy in {
+        "land_sea_mask_plus_unknown_v1",
+        "land_sea_mask_plus_unknown_ice_free_v1",
+    }:
         reason[(~valid) & (~land)] = "DATA_UNAVAILABLE"
     unexplained = hard & (reason == "NONE")
     reason[unexplained] = "OTHER"
     reason[~hard] = "NONE"
     return reason
+
+
+def _apply_ice_free_neutral_fill(
+    values: dict[str, np.ndarray],
+) -> dict[str, np.ndarray]:
+    """Neutralise NEXTsim ice type/edge where the ocean is ice-free.
+
+    NEXTsim masks ice type and ice edge over ice-free water (native NaN), which
+    is physically meaningful: no ice implies no ice type and no ice edge.  When
+    TOPAZ ice concentration is finite and at or below the ice-edge threshold,
+    those NaN cells are filled with 0.0 (zero risk contribution) instead of
+    being treated as missing data.  Cells where concentration itself is unknown
+    remain NaN and stay fail-closed.
+    """
+
+    concentration = values["ice_concentration"]
+    ice_free = np.isfinite(concentration) & (
+        concentration <= ICE_FREE_CONCENTRATION_THRESHOLD
+    )
+    for name in ("ice_type", "ice_edge"):
+        array = values[name]
+        fill = ice_free & ~np.isfinite(array)
+        if np.any(fill):
+            values[name] = np.where(fill, 0.0, array)
+    return values
 
 
 def _risk_component(

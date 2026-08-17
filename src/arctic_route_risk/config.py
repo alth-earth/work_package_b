@@ -238,6 +238,7 @@ class DemoRiskModelConfig:
         if self.hard_mask_policy not in {
             "land_sea_mask_threshold_v2",
             "land_sea_mask_plus_unknown_v1",
+            "land_sea_mask_plus_unknown_ice_free_v1",
         }:
             raise RiskPipelineError("unsupported hard_mask_policy")
         if self.calibration_status != "demo_unvalidated":

@@ -8,6 +8,11 @@
 
 ### 2026-08-17（RC2 development）
 
+- 新增 hard_mask 策略 `land_sea_mask_plus_unknown_ice_free_v1`：无冰水域
+  （TOPAZ 冰浓度 ≤0.15）将 NEXTsim ice_type/ice_edge 的原生 NaN 中性化为 0
+  （无冰 → 无冰型/冰缘，风险贡献 0），其余 unknown 仍 fail-closed；
+  解决 Tromsø 外海起点“无冰却被判 DATA_UNAVAILABLE”的语义问题；
+  RC1 配置不启用该策略，digest 不变。
 - 正式 RiskFrame 新增每格 `hard_reason`（NONE / LAND / DATA_UNAVAILABLE / OTHER）：
   原因优先级为物理陆地（LAND）→ 数据不足（DATA_UNAVAILABLE，仅
   `land_sea_mask_plus_unknown_v1` 策略下）→ OTHER；hard_mask 语义与 fail-closed

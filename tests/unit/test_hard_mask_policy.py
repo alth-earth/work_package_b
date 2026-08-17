@@ -5,7 +5,10 @@ from __future__ import annotations
 import numpy as np
 
 from arctic_route_risk.config import DemoRiskModelConfig
-from arctic_route_risk.service import _demo_unvalidated_risk
+from arctic_route_risk.service import (
+    _apply_ice_free_neutral_fill,
+    _demo_unvalidated_risk,
+)
 
 
 def _base_values() -> dict[str, np.ndarray]:
@@ -80,3 +83,61 @@ def test_unsupported_policy_rejected() -> None:
 
     with pytest.raises(RiskPipelineError):
         DemoRiskModelConfig(hard_mask_policy="invented_policy_v9")
+
+
+def test_ice_free_neutral_fill_only_fills_ice_type_and_edge() -> None:
+    values = {
+        "ice_concentration": np.array([[0.0, 0.3], [np.nan, 0.0]]),
+        "ice_type": np.array([[np.nan, np.nan], [np.nan, 2.0]]),
+        "ice_edge": np.array([[np.nan, np.nan], [np.nan, 1.0]]),
+    }
+    filled = _apply_ice_free_neutral_fill(values)
+
+    # ice-free cells (0.0) get neutral 0.0
+    assert filled["ice_type"][0, 0] == 0.0
+    assert filled["ice_edge"][0, 0] == 0.0
+    # above threshold stays missing
+    assert np.isnan(filled["ice_type"][0, 1])
+    # concentration unknown stays missing
+    assert np.isnan(filled["ice_type"][1, 0])
+    # existing finite value is preserved
+    assert filled["ice_type"][1, 1] == 2.0
+    assert filled["ice_edge"][1, 1] == 1.0
+
+
+def test_ice_free_policy_marks_true_unknown_hard_but_ice_free_navigable() -> None:
+    shape = (2, 2)
+    values = {
+        "land_sea_mask": np.ones(shape),
+        "ice_concentration": np.array([[0.0, np.nan], [0.0, 0.0]]),
+        "ice_thickness": np.ones(shape),
+        "ice_type": np.array([[np.nan, np.nan], [np.nan, np.nan]]),
+        "ice_edge": np.array([[np.nan, np.nan], [np.nan, np.nan]]),
+        "ice_drift_u": np.zeros(shape),
+        "ice_drift_v": np.zeros(shape),
+        "significant_wave_height": np.zeros(shape),
+        "ocean_current_u": np.zeros(shape),
+        "ocean_current_v": np.zeros(shape),
+        "wind_u10": np.zeros(shape),
+        "wind_v10": np.zeros(shape),
+        "air_temperature_2m": np.full(shape, 280.0),
+        "visibility": np.full(shape, 20_000.0),
+        "sea_surface_height": np.zeros(shape),
+    }
+    model = DemoRiskModelConfig(
+        hard_mask_policy="land_sea_mask_plus_unknown_ice_free_v1"
+    )
+    filled = _apply_ice_free_neutral_fill(values)
+    risk, hard, confidence, _, reason = _demo_unvalidated_risk(
+        values=filled,
+        source_confidence=1.0,
+        model_config=model,
+    )
+    # ice-free cells are navigable and NONE
+    assert not hard[0, 0]
+    assert reason[0, 0] == "NONE"
+    assert np.isfinite(risk[0, 0])
+    # unknown concentration remains DATA_UNAVAILABLE
+    assert hard[0, 1]
+    assert reason[0, 1] == "DATA_UNAVAILABLE"
+    assert confidence[0, 1] == 0.0
