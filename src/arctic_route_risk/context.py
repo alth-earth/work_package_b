@@ -302,7 +302,7 @@ def _snapshot_attested_frames(
                 raise InputIdentityError(
                     f"input_identity_mismatch: {data_id} payload changed after attestation"
                 )
-            snapshot = frame.consumer_copy()
+            snapshot = frame.consumer_view()
             if semantic_payload_digest(snapshot.record, snapshot.payload) != expected:
                 raise InputIdentityError(
                     f"input_identity_mismatch: {data_id} payload changed while snapshotting"

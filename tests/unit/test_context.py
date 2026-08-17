@@ -23,6 +23,31 @@ def test_envelope_verifies_exact_bundle_and_live_frames(formal_fixture) -> None:
     assert sum(map(len, envelope.frames.values())) == len(envelope.dataset_bundle.records)
 
 
+def test_verified_build_snapshot_shares_read_only_buffers(formal_fixture) -> None:
+    envelope = BInputEnvelope.from_prepared_window(
+        run_context=formal_fixture.context,
+        prepared_window=formal_fixture.prepared,
+        generation_id=formal_fixture.prepared.generation_id,
+        knowledge_as_of=formal_fixture.prepared.as_of_time,
+    )
+    snapshot = envelope.verified_build_snapshot()
+
+    original = next(iter(envelope.frames.values()))[0]
+    copied = next(iter(snapshot.frames.values()))[0]
+    variable = next(iter(original.payload.data_vars))
+    assert np.shares_memory(
+        copied.payload[variable].values,
+        original.payload[variable].values,
+    )
+    with pytest.raises(ValueError, match="read-only"):
+        copied.payload[variable].values.flat[0] = 0.0
+    with pytest.raises(ValueError, match="read-only"):
+        original.payload[variable].values.flat[0] = 0.0
+    # structural mutation of the snapshot must not leak into the envelope
+    copied.payload["probe"] = ("x", [1.0])
+    assert "probe" not in original.payload
+
+
 def test_envelope_rejects_run_context_bundle_identity_mismatch(formal_fixture) -> None:
     context = replace(formal_fixture.context, dataset_bundle_digest="f" * 64)
 

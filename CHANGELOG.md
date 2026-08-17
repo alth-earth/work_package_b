@@ -8,6 +8,9 @@
 
 ### 2026-08-17（RC2 development）
 
+- `verified_build_snapshot()` 改用 `StandardDataFrame.consumer_view()`：
+  不再深拷贝全部 A 帧，而是共享已只读数组 + 独立结构壳；digest 复核与
+  mutation-safety 语义不变（新增共享/只读/结构隔离测试）。
 - 新增 hard_mask 策略 `land_sea_mask_plus_unknown_ice_free_v1`：无冰水域
   （可信 TOPAZ 冰浓度 `0 <= x < 0.15`，阈值权威来源为 A
   `ICE_EDGE_CONCENTRATION_THRESHOLD`）将 NEXTsim ice_type/ice_edge 的原生
