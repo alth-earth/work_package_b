@@ -1,3 +1,13 @@
+---
+Overall Status: ACTIVE
+Content Status:
+  - COMPLETED
+Document Role: SUPPORTING
+Scope: B consumption of A public artifacts
+Branch: research-validation-system
+Last Verified: 2026-08-21
+---
+
 # A → B 公共适配
 
 正式入口是 A 的 `PreparedWindow`，其中包含 `DatasetBundle`、实际 `StandardDataFrame`、

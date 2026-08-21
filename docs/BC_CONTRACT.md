@@ -1,3 +1,13 @@
+---
+Overall Status: ACTIVE
+Content Status:
+  - COMPLETED
+Document Role: SUPPORTING
+Scope: B publication of C RiskFrame contract
+Branch: research-validation-system
+Last Verified: 2026-08-21
+---
+
 # B → C 发布合同
 
 B 直接构造 C 公共 `RiskFrame`，并使用 C 公共 codec 生成：
