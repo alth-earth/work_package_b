@@ -1,3 +1,14 @@
+---
+Overall Status: ACTIVE
+Content Status:
+  - COMPLETED
+  - PLANNED
+Document Role: CANONICAL
+Scope: work package B entrypoint and public boundary
+Branch: research-validation-system
+Last Verified: 2026-08-21
+---
+
 > [!NOTE]
 > **文档治理声明**
 > - 文件角色：正式工作包 B 的现行入口与边界说明。
@@ -6,6 +17,12 @@
 > - 改造原因：统一正式主线、可选 CNN 后端、验证证据和后续开发入口。
 
 # 工作包 B：逐小时环境风险场
+
+## Research Validation 定位（2026-08-21 23:18）
+
+B 的阶段角色为 Risk Assessment and Forecast。当前 fixed-grid risk 与 hard reason 已实现，
+但仍是 `demo_unvalidated`；Adaptive Grid 和科学标定均为 PLANNED。RC2 31×11 来自显式
+Tromsø 配置，不是 `TargetGridConfig()` 的全局默认。
 
 工作包 B `0.2.0` 是 A 与 C 之间的正式风险服务：只消费 A 的公共
 `PreparedWindow` / `DatasetBundle v2` 及与其匹配的 `RunContext v2`，按小时发布

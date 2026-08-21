@@ -1,3 +1,14 @@
+---
+Overall Status: ACTIVE
+Content Status:
+  - COMPLETED
+  - IN_PROGRESS
+Document Role: SUPPORTING
+Scope: work package B change history
+Branch: research-validation-system
+Last Verified: 2026-08-21
+---
+
 # 工作包 B 变更记录
 
 本文件记录工作包 B 的可见功能、跨包合同、验证证据与兼容边界。当前实现和运行方法见
@@ -21,12 +32,12 @@
   `ice_free_neutralized_input_counts` 与 `ice_free_predicate` provenance。
 - 正式 RiskFrame 新增每格 `hard_reason`（NONE / LAND / DATA_UNAVAILABLE / OTHER）：
   原因优先级为物理陆地（LAND）→ 数据不足（DATA_UNAVAILABLE，仅
-  `land_sea_mask_plus_unknown_v1` 策略下）→ OTHER；hard_mask 语义与 fail-closed
+  unknown-hard 策略下）→ OTHER；hard_mask 语义与 fail-closed
   不变。
 - payload attributes 新增 `missing_input_variable_counts`（每输入变量非有限格数），
   供 coverage preflight 直接消费；`_demo_unvalidated_risk` 返回 5 元组（含 reason）。
 - 新增 RC2 Tromso 冒烟网格配置 `demo_unvalidated_tromso_smoke_grid_v1.json`
-  （0.375°×1.25°，hard_mask_policy=land_sea_mask_plus_unknown_v1）；RC1 的
+  （0.375°×1.25°，hard_mask_policy=land_sea_mask_plus_unknown_ice_free_v1）；RC1 的
   smoke grid v4 未改动。
 - 单元测试 54 passed（非集成）。
 
