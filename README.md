@@ -24,6 +24,10 @@ B 的阶段角色为 Risk Assessment and Forecast。当前 fixed-grid risk 与 h
 但仍是 `demo_unvalidated`；Adaptive Grid 和科学标定均为 PLANNED。RC2 31×11 来自显式
 Tromsø 配置，不是 `TargetGridConfig()` 的全局默认。
 
+The isolated baseline/medium/fine grid experiment framework is documented in
+[`B_GRID_EXPERIMENT_REPORT.md`](B_GRID_EXPERIMENT_REPORT.md). It does not alter
+the formal default or publish RiskFrames.
+
 工作包 B `0.2.0` 是 A 与 C 之间的正式风险服务：只消费 A 的公共
 `PreparedWindow` / `DatasetBundle v2` 及与其匹配的 `RunContext v2`，按小时发布
 `bc.risk-frame.v2`。当前实现是可审计的工程基线，风险数值仍标记为

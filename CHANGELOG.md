@@ -17,6 +17,13 @@ Last Verified: 2026-08-21
 
 ## Unreleased
 
+### 2026-08-22（Research fixed-grid experiment framework）
+
+- add strict baseline/medium/fine experiment profiles outside production model configs;
+- add a deterministic synthetic xarray regridding-kernel benchmark with runtime,
+  memory, grid identity and output digest evidence;
+- preserve all formal grid defaults, risk policies and `bc.risk-frame.v2` semantics.
+
 ### 2026-08-17（RC2 development）
 
 - `verified_build_snapshot()` 改用 `StandardDataFrame.consumer_view()`：
