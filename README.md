@@ -6,7 +6,7 @@ Content Status:
 Document Role: CANONICAL
 Scope: work package B entrypoint and public boundary
 Branch: research-validation-system
-Last Verified: 2026-08-21
+Last Verified: 2026-08-22
 ---
 
 > [!NOTE]
@@ -27,6 +27,12 @@ Tromsø 配置，不是 `TargetGridConfig()` 的全局默认。
 The isolated baseline/medium/fine grid experiment framework is documented in
 [`B_GRID_EXPERIMENT_REPORT.md`](B_GRID_EXPERIMENT_REPORT.md). It does not alter
 the formal default or publish RiskFrames.
+
+The bounded formal comparison is documented in
+[`B_FORMAL_GRID_COMPARISON_REPORT.md`](B_FORMAL_GRID_COMPARISON_REPORT.md).
+It ran 78 real formal frames on 16×7, 31×11 and 60×21 grids without publishing
+an experimental window or changing production defaults. This is engineering
+evidence; the existing model remains `demo_unvalidated`.
 
 工作包 B `0.2.0` 是 A 与 C 之间的正式风险服务：只消费 A 的公共
 `PreparedWindow` / `DatasetBundle v2` 及与其匹配的 `RunContext v2`，按小时发布
@@ -91,12 +97,12 @@ make model-check    # 可选：仅验证 CNN P1
 - 风险与时序：[docs/RISK_MODEL.md](docs/RISK_MODEL.md)、[docs/TEMPORAL_MODEL.md](docs/TEMPORAL_MODEL.md)
 - 当前验证：[docs/VALIDATION.md](docs/VALIDATION.md)
 - CNN 模型审计与分阶段计划：[docs/DELIVERED_CNN_MODEL_AUDIT.md](docs/DELIVERED_CNN_MODEL_AUDIT.md)、[docs/DELIVERED_CNN_INTEGRATION_PLAN.md](docs/DELIVERED_CNN_INTEGRATION_PLAN.md)
-- 系统级权威文档：[ARCTIC_ROUTE_SYSTEM.md](../ARCTIC_ROUTE_SYSTEM.md)、[ABC_10_DAY_SPRINT.md](../ABC_10_DAY_SPRINT.md)
+- 系统级权威文档：[ARCTIC_ROUTE_SYSTEM.md](../arctic_route_governance/current/architecture/ARCTIC_ROUTE_SYSTEM.md)、[CURRENT_ROADMAP.md](../arctic_route_governance/current/CURRENT_ROADMAP.md)
 - 共享契约：[arctic_route_contracts/README.md](../arctic_route_contracts/README.md)
 
 ## 下一步顺序
 
-1. 用 A 正式发布且来源完整的 bundle 做冻结场景回放，保留 UTC 时间和来源字段。
+1. 重复 bounded formal grid experiment，建立方差和独立 B 增量 RSS；fine C 规划需先设时间/展开上限。
 2. 完成规则风险的科学标定与阈值评审，再讨论 `demo_unvalidated` 升级。
 3. 获得明确批准后才实现 CNN P2 sidecar；保持 fail-open、不可写正式 store、不可进入 C。
 4. P2 证据充分后再决定是否启动 P3 多时效改造；P4 正式接入必须另行评审。

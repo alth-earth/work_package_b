@@ -6,7 +6,7 @@ Content Status:
 Document Role: SUPPORTING
 Scope: work package B change history
 Branch: research-validation-system
-Last Verified: 2026-08-21
+Last Verified: 2026-08-22
 ---
 
 # 工作包 B 变更记录
@@ -16,6 +16,17 @@ Last Verified: 2026-08-21
 [验收记录](docs/VALIDATION.md)。
 
 ## Unreleased
+
+### Formal fixed-grid comparison（2026-08-22 01:11 +08:00）
+
+- add a bounded harness around A's public PreparedWindow and B's real
+  `RiskBuildService`, with sequential baseline/medium/fine execution;
+- record frame shape, generation time, sampled RSS, transport bytes, per-frame
+  risk distribution and hard-reason distribution;
+- emit experimental unpublished `bc.risk-frame.v2` transport documents for C
+  coupling measurements without changing the production store or defaults;
+- validate the harness on the formal unit fixture and document the 78-frame
+  real-data comparison in `B_FORMAL_GRID_COMPARISON_REPORT.md`.
 
 ### 2026-08-22（Research fixed-grid experiment framework）
 
