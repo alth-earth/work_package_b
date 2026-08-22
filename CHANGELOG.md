@@ -17,6 +17,18 @@ Last Verified: 2026-08-22
 
 ## Unreleased
 
+### Winter B first scientific validation（2026-08-23 02:44 +08:00）
+
+- 新增 `scripts/run_winter_b_validation.py`，只编排 A exact-bundle restore、已有
+  `RiskBuildService` 和 `PersistentRiskStore`，不改变风险公式、level policy、hard reason
+  或 contract schema。
+- 在固定 `a-bundle-a2146dd0adbaa7db77a6beb7`、RunContext generation `0` 和 Tromsø medium
+  `31×11` grid 上生成 145 个 formal `bc.risk-frame.v2`，完成 schema、provenance、窗口
+  commit/readback 验证。
+- 该 runner 的输出仅进入新的 runtime experiment store；C、D、Replay 和 production default
+  均未改变。Summer/Winter 风险分布统计及 `DATA_UNAVAILABLE`/unknown 审计见治理 supporting
+  reports。
+
 ### Formal fixed-grid comparison（2026-08-22 01:11 +08:00）
 
 - add a bounded harness around A's public PreparedWindow and B's real

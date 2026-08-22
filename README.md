@@ -24,6 +24,19 @@ B 的阶段角色为 Risk Assessment and Forecast。当前 fixed-grid risk 与 h
 但仍是 `demo_unvalidated`；Adaptive Grid 和科学标定均为 PLANNED。RC2 31×11 来自显式
 Tromsø 配置，不是 `TargetGridConfig()` 的全局默认。
 
+## Winter B 首轮研究验证（2026-08-23 02:44 +08:00）
+
+状态：`COMPLETED / EXPERIMENTAL`。
+
+在固定的 Winter `DatasetBundle.v2`、`RunContext.v2`、`ExecutionSpec.v1` generation `0`
+上，使用 Tromsø `medium` realized `31×11` grid 生成 145 个 formal hourly
+`bc.risk-frame.v2`，并提交到新的 `.runtime` `PersistentRiskStore`。Schema、formal
+provenance、commit readback 和 Summer/Winter 分布审计均通过。
+
+本轮没有修改风险公式、level policy、hard reason、生产默认配置或 contract；没有运行 C、D
+或 Replay。模型仍为 `demo_unvalidated`。完整证据见治理 current 文档中的
+`WINTER_B_RISK_VALIDATION_REPORT.md`。
+
 The isolated baseline/medium/fine grid experiment framework is documented in
 [`B_GRID_EXPERIMENT_REPORT.md`](B_GRID_EXPERIMENT_REPORT.md). It does not alter
 the formal default or publish RiskFrames.
@@ -102,7 +115,8 @@ make model-check    # 可选：仅验证 CNN P1
 
 ## 下一步顺序
 
-1. 重复 bounded formal grid experiment，建立方差和独立 B 增量 RSS；fine C 规划需先设时间/展开上限。
-2. 完成规则风险的科学标定与阈值评审，再讨论 `demo_unvalidated` 升级。
-3. 获得明确批准后才实现 CNN P2 sidecar；保持 fail-open、不可写正式 store、不可进入 C。
-4. P2 证据充分后再决定是否启动 P3 多时效改造；P4 正式接入必须另行评审。
+1. 复核 Winter `DATA_UNAVAILABLE` 空间支持与有限风险分布，再进入 C Winter consumer smoke。
+2. 重复 bounded formal grid experiment，建立方差和独立 B 增量 RSS；fine C 规划需先设时间/展开上限。
+3. 完成规则风险的科学标定与阈值评审，再讨论 `demo_unvalidated` 升级。
+4. 获得明确批准后才实现 CNN P2 sidecar；保持 fail-open、不可写正式 store、不可进入 C。
+5. P2 证据充分后再决定是否启动 P3 多时效改造；P4 正式接入必须另行评审。
