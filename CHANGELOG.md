@@ -6,7 +6,7 @@ Content Status:
 Document Role: SUPPORTING
 Scope: work package B change history
 Branch: research-validation-system
-Last Verified: 2026-08-22
+Last Verified: 2026-08-23
 ---
 
 # 工作包 B 变更记录
@@ -16,6 +16,19 @@ Last Verified: 2026-08-22
 [验收记录](docs/VALIDATION.md)。
 
 ## Unreleased
+
+### Risk explanation research exporter（2026-08-23 21:40 +08:00）
+
+- 新增 research-only `build_window_with_explanation_trace()`，在 B 同次真实公式求值中捕获
+  component `normalized_value`、`weight` 与 weighted `contribution`；现有 `build_window()`、
+  RiskFrame payload、公式、threshold 和 C 输入均保持不变。
+- 新增 `RiskExplanationResearchExporter`，精确绑定 committed RiskWindow、RiskFrame、UTC
+  frame time、grid 与风险快照，生成 strict `risk-explanation.v1` JSON。
+- 支持 `COMPLETE` / `PARTIAL` / `UNAVAILABLE`；缺测 component 保持缺席/NaN，不补零、不猜测、
+  不重归一权重；`land_sea_mask` validity 缺测明确为 `UNAVAILABLE`，零风险不虚构主要贡献。
+- `RiskBuildTraceResult` 完整性摘要绑定 frames/identity/grid/validity/component arrays/weights，拒绝
+  总和保持不变但 attribution 被替换的 trace。当前无 Sidecar store、Orchestrator/D 集成或真实
+  Viewer E2E。
 
 ### Winter B first scientific validation（2026-08-23 02:44 +08:00）
 

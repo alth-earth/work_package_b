@@ -1,3 +1,15 @@
+---
+Overall Status: ACTIVE
+Content Status:
+  - COMPLETED
+  - IN_PROGRESS
+Document Role: CANONICAL
+Scope: Work Package B validation evidence and acceptance boundary
+Canonical For: current B validation commands, results, and maturity limits
+Branch: research-validation-system
+Last Verified: 2026-08-23
+---
+
 > [!NOTE]
 > **文档治理声明**
 > - 文件角色：正式工作包 B 的现行验证记录与验收边界。
@@ -6,6 +18,35 @@
 > - 改造原因：以本次实测结果纠正旧计数，并分开正式路径和 CNN 可选后端证据。
 
 # 正式工作包 B 验证记录
+
+## 2026-08-23 Risk Explanation Research Exporter（2026-08-23 21:40 +08:00）
+
+本轮 verdict：`UNIT_PASS / FULL MAKE GATE BLOCKED`。在仓库现有 Python `3.13.15` `.venv`
+中，risk explanation 相关 11 项测试全部通过；排除并发、非本任务 `calibration_shadow` 文件后，
+本轮相关 unit/contract 集为 `62 passed`。验证包括：
+
+- 与治理仓库 Draft 2020-12 `risk-explanation.v1.schema.json` 兼容且可严格 JSON 序列化；
+- 同次 B 公式求值 trace 的 `normalized_value * weight == contribution`；
+- `sum(contribution) == RiskFrame.risk_score` 与故意错配失败关闭；
+- RiskWindow / RiskFrame / frame time / grid identity binding；
+- 单 component 缺测为 `PARTIAL` 且不补零；全部 component 缺测为 `UNAVAILABLE` 且无 contributor；
+- `land_sea_mask` validity 缺测为 `UNAVAILABLE`；零风险不虚构主要 contributor；
+- sealed build trace 拒绝同和异构 attribution 修改；
+- research trace build 与原 `build_window()` 的 canonical RiskFrame bytes 完全一致。
+
+执行证据：
+
+| 命令 | 结果 | 说明 |
+|---|---|---|
+| `.venv/bin/ruff check src tests` | PASS | 当前工作树 Ruff 通过 |
+| `.venv/bin/pytest -q tests/unit/test_risk_explanation.py` | `11 passed` | producer 专项 |
+| 明确列举本轮相关 contract/unit 文件 | `62 passed` | 排除并发 `calibration_shadow` 文件 |
+| `.venv/bin/pytest -m integration -q` | `7 passed, 1 failed` | 失败为既有 Murmansk–Dikson default grid 无 destination allowed-region node；本轮未改 C/走廊/网格 |
+| `make lint/test/integration/check` | BLOCKED | `uv run --locked` 报 `uv.lock needs to be updated`；本轮未改 `uv.lock` 或上游 A 依赖 |
+
+该验证成熟度为 `UNIT_PASS`，不是 `SMOKE_PASS`、`REAL_E2E_PASS` 或生产 Sidecar 发布证据。
+未运行真实 committed Winter window exporter、Sidecar store、Orchestrator transport、D consumer、
+Browser E2E、12h/24h replay 或性能/体积 benchmark。
 
 ## 2026-08-14 可复核结果
 

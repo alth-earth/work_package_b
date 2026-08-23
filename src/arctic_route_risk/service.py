@@ -27,6 +27,12 @@ from arctic_route_risk.config import (
 )
 from arctic_route_risk.context import REQUIRED_FORMAL_DATA_TYPES, BInputEnvelope
 from arctic_route_risk.errors import CoverageError, GridCompatibilityError, RiskPipelineError
+from arctic_route_risk.risk_explanation import (
+    RiskBuildTraceResult,
+    RiskComponentTrace,
+    RiskExplanationFrameTrace,
+    RiskExplanationTraceWindow,
+)
 
 _VARIABLES: dict[str, tuple[str, ...]] = {
     "land_sea_mask": ("land_sea_mask",),
@@ -85,6 +91,24 @@ class _ResolvedField:
     confidence: float
 
 
+@dataclass(frozen=True, slots=True)
+class _RiskEvaluation:
+    risk: np.ndarray
+    hard: np.ndarray
+    confidence: np.ndarray
+    speed_factor: np.ndarray
+    hard_reason: np.ndarray
+    land_sea_valid: np.ndarray
+    normalized_components: tuple[tuple[RiskComponentConfig, np.ndarray], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _BuiltFrame:
+    frame: RiskFrame
+    land_sea_valid: np.ndarray
+    components: tuple[RiskComponentTrace, ...]
+
+
 class RiskBuildService:
     """Build a complete full-RunContext window without changing A payloads."""
 
@@ -92,6 +116,30 @@ class RiskBuildService:
         self._utc_now = utc_now or (lambda: datetime.now(UTC))
 
     def build_window(self, request: RiskBuildRequest) -> tuple[RiskFrame, ...]:
+        """Build the unchanged formal RiskFrame sequence."""
+
+        frames, trace = self._build_window(request, capture_explanation=False)
+        assert trace is None
+        return frames
+
+    def build_window_with_explanation_trace(
+        self, request: RiskBuildRequest
+    ) -> RiskBuildTraceResult:
+        """Research-only build that also captures exact formula component evidence."""
+
+        frames, trace = self._build_window(request, capture_explanation=True)
+        assert trace is not None
+        return RiskBuildTraceResult._from_pipeline(
+            frames=frames,
+            explanation_trace=trace,
+        )
+
+    def _build_window(
+        self,
+        request: RiskBuildRequest,
+        *,
+        capture_explanation: bool,
+    ) -> tuple[tuple[RiskFrame, ...], RiskExplanationTraceWindow | None]:
         # Recheck A's semantic payload attestations immediately before reading
         # values, then work only from a fresh deep snapshot. This closes the
         # validation-to-build aliasing gap of inspectable xarray containers.
@@ -106,7 +154,7 @@ class RiskBuildService:
                 "forecast_coverage_insufficient: RunContext window is not hourly aligned"
             )
         count = int(duration / interval) + 1
-        frames = tuple(
+        built = tuple(
             self._build_frame(
                 request=request,
                 valid_time=envelope.requested_start + index * interval,
@@ -114,12 +162,44 @@ class RiskBuildService:
                 latitude=latitude,
                 longitude=longitude,
                 grid_id=grid_id,
+                capture_explanation=capture_explanation,
             )
             for index in range(count)
         )
+        frames = tuple(item.frame for item in built)
         if not frames or frames[-1].valid_time != envelope.requested_end:
             raise CoverageError("forecast_coverage_insufficient: output window is incomplete")
-        return frames
+        if not capture_explanation:
+            return frames, None
+        first = frames[0]
+        trace = RiskExplanationTraceWindow(
+            run_id=first.run_id,
+            scenario_id=first.scenario_id,
+            corridor_id=first.corridor_id,
+            vessel_profile_id=first.vessel_profile_id,
+            config_digest=first.config_digest,
+            model_config_digest=first.model_config_digest,
+            generation_id=first.generation_id,
+            as_of_time=first.as_of_time,
+            formula_version=request.model_config.formula_version,
+            calibration_status=request.model_config.calibration_status,
+            formula_component_ids=tuple(
+                component.component_id for component in request.model_config.components
+            ),
+            frames=tuple(
+                RiskExplanationFrameTrace(
+                    risk_frame_id=item.frame.risk_id,
+                    frame_time=item.frame.valid_time,
+                    grid_id=item.frame.grid.grid_id,
+                    latitude=np.asarray(item.frame.payload["latitude"].values),
+                    longitude=np.asarray(item.frame.payload["longitude"].values),
+                    land_sea_valid=item.land_sea_valid,
+                    components=item.components,
+                )
+                for item in built
+            ),
+        )
+        return frames, trace
 
     def _build_frame(
         self,
@@ -130,7 +210,8 @@ class RiskBuildService:
         latitude: np.ndarray,
         longitude: np.ndarray,
         grid_id: str,
-    ) -> RiskFrame:
+        capture_explanation: bool,
+    ) -> _BuiltFrame:
         envelope = request.envelope
         resolved = {
             data_type: _resolve_field(
@@ -160,11 +241,16 @@ class RiskBuildService:
                 "ice_type": 0,
                 "ice_edge": 0,
             }
-        risk, hard, confidence, speed_factor, reason = _demo_unvalidated_risk(
+        evaluation = _evaluate_demo_unvalidated_risk(
             arrays,
             source_confidence=min(field.confidence for field in resolved.values()),
             model_config=request.model_config,
         )
+        risk = evaluation.risk
+        hard = evaluation.hard
+        confidence = evaluation.confidence
+        speed_factor = evaluation.speed_factor
+        reason = evaluation.hard_reason
         missing_input_variable_counts = {
             variable: int(np.count_nonzero(~np.isfinite(values)))
             for variable, values in arrays.items()
@@ -232,7 +318,25 @@ class RiskBuildService:
             source_summary=sources,
             provenance=ProvenanceKind.FORMAL,
         )
-        return replace(provisional, risk_id=with_canonical_risk_id(provisional))
+        frame = replace(provisional, risk_id=with_canonical_risk_id(provisional))
+        components = (
+            tuple(
+                RiskComponentTrace(
+                    component_id=component.component_id,
+                    normalized_value=normalized,
+                    weight=component.weight,
+                    contribution=component.weight * normalized,
+                )
+                for component, normalized in evaluation.normalized_components
+            )
+            if capture_explanation
+            else ()
+        )
+        return _BuiltFrame(
+            frame=frame,
+            land_sea_valid=evaluation.land_sea_valid,
+            components=components,
+        )
 
 
 def _resolve_field(
@@ -421,16 +525,41 @@ def _demo_unvalidated_risk(
     source_confidence: float,
     model_config: DemoRiskModelConfig,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    components = tuple(
-        (
-            component.weight,
-            _risk_component(values, component),
-        )
+    """Return the frozen formal outputs without exposing research trace state."""
+
+    evaluation = _evaluate_demo_unvalidated_risk(
+        values,
+        source_confidence=source_confidence,
+        model_config=model_config,
+    )
+    return (
+        evaluation.risk,
+        evaluation.hard,
+        evaluation.confidence,
+        evaluation.speed_factor,
+        evaluation.hard_reason,
+    )
+
+
+def _evaluate_demo_unvalidated_risk(
+    values: dict[str, np.ndarray],
+    *,
+    source_confidence: float,
+    model_config: DemoRiskModelConfig,
+) -> _RiskEvaluation:
+    normalized_components = tuple(
+        (component, _risk_component(values, component))
         for component in model_config.components
     )
-    risk = sum(weight * component for weight, component in components)
-    valid = np.logical_and.reduce([np.isfinite(component) for _, component in components])
+    risk = sum(
+        component.weight * normalized
+        for component, normalized in normalized_components
+    )
+    valid = np.logical_and.reduce(
+        [np.isfinite(normalized) for _, normalized in normalized_components]
+    )
     land_sea = values["land_sea_mask"]
+    land_sea_valid = np.isfinite(land_sea)
     hard = ~np.isfinite(land_sea) | (
         land_sea < model_config.land_sea_mask_land_threshold
     )
@@ -459,7 +588,15 @@ def _demo_unvalidated_risk(
         valid=valid,
         model_config=model_config,
     )
-    return risk, hard, confidence, speed, reason
+    return _RiskEvaluation(
+        risk=risk,
+        hard=hard,
+        confidence=confidence,
+        speed_factor=speed,
+        hard_reason=reason,
+        land_sea_valid=land_sea_valid,
+        normalized_components=normalized_components,
+    )
 
 
 def _hard_reason_values(

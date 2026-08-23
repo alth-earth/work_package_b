@@ -6,7 +6,7 @@ Content Status:
 Document Role: CANONICAL
 Scope: work package B entrypoint and public boundary
 Branch: research-validation-system
-Last Verified: 2026-08-22
+Last Verified: 2026-08-23
 ---
 
 > [!NOTE]
@@ -63,6 +63,7 @@ evidence; the existing model remains `demo_unvalidated`.
 | RC1 hard-mask 策略 | `land_sea_mask_plus_unknown_v1`（source-unknown → hard） | B 风险帧 145 帧 unknown-navigable=0 |
 | RC2 hard_reason | `hard_reason`（NONE/LAND/DATA_UNAVAILABLE/OTHER）+ `missing_input_variable_counts` | 每格原因可解释；hard_mask/fail-closed 不变（RC2 分支） |
 | RC2 无冰语义 | `land_sea_mask_plus_unknown_ice_free_v1`：无冰水域 ice_type/edge 中性化为 0 | 解决 Tromsø 外海起点误判 DATA_UNAVAILABLE；RC1 策略不变 |
+| `risk-explanation.v1` B research exporter | 已实现、`UNIT_PASS`、未生产集成 | 同次公式求值捕获 component trace；不修改 RiskFrame/C/D |
 | 科学/真船风险标定 | 未完成（非 RC1 门槛） | 见 [风险基线](docs/RISK_MODEL.md) |
 
 统一事实口径：`22_深度学习综合风险预测模型.zip` 已整合进当前 B 仓库的可选实验后端并完成
@@ -109,6 +110,7 @@ make model-check    # 可选：仅验证 CNN P1
 - B→C 契约：[docs/BC_CONTRACT.md](docs/BC_CONTRACT.md)
 - 风险与时序：[docs/RISK_MODEL.md](docs/RISK_MODEL.md)、[docs/TEMPORAL_MODEL.md](docs/TEMPORAL_MODEL.md)
 - 当前验证：[docs/VALIDATION.md](docs/VALIDATION.md)
+- 风险解释 research producer：[docs/RISK_EXPLANATION_EXPORTER.md](docs/RISK_EXPLANATION_EXPORTER.md)
 - CNN 模型审计与分阶段计划：[docs/DELIVERED_CNN_MODEL_AUDIT.md](docs/DELIVERED_CNN_MODEL_AUDIT.md)、[docs/DELIVERED_CNN_INTEGRATION_PLAN.md](docs/DELIVERED_CNN_INTEGRATION_PLAN.md)
 - 系统级权威文档：[ARCTIC_ROUTE_SYSTEM.md](../arctic_route_governance/current/architecture/ARCTIC_ROUTE_SYSTEM.md)、[CURRENT_ROADMAP.md](../arctic_route_governance/current/CURRENT_ROADMAP.md)
 - 共享契约：[arctic_route_contracts/README.md](../arctic_route_contracts/README.md)

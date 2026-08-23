@@ -34,6 +34,10 @@ from arctic_route_risk.modeling import (
     intake_legacy_cnn_zip,
 )
 from arctic_route_risk.publishing import PersistentRiskStore
+from arctic_route_risk.risk_explanation import (
+    RiskBuildTraceResult,
+    RiskExplanationResearchExporter,
+)
 from arctic_route_risk.service import RiskBuildRequest, RiskBuildService
 
 __all__ = [
@@ -56,7 +60,9 @@ __all__ = [
     "RiskBuildConfiguration",
     "RiskBuildRequest",
     "RiskBuildService",
+    "RiskBuildTraceResult",
     "RiskComponentConfig",
+    "RiskExplanationResearchExporter",
     "RiskModelBackend",
     "RiskModelInput",
     "RiskModelOutput",
