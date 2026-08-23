@@ -1,0 +1,50 @@
+{
+  "schema_version": "b.risk-calibration-shadow-experiment.v1",
+  "experiment_id": "winter-risk-calibration-shadow-v1",
+  "source": {
+    "risk_window_id": "risk-window-sha256-b5bed6bb48893e32620710e8c765dc60ec37a2fc384f0c49014b92f0a1c056b2",
+    "risk_window_content_digest": "b5bed6bb48893e32620710e8c765dc60ec37a2fc384f0c49014b92f0a1c056b2",
+    "risk_window_manifest_sha256": "3a711f4c5c1b150e9c881d97f184218846f0b9d07474a892ff65942e4e0c2d67",
+    "run_id": "run-441b03c8-d45b-5414-b0e8-b7fd0d990c22",
+    "scenario_id": "tromso_isfjorden_february_2026_research_v1",
+    "frame_index_sha256": "bc19e22b9249971cf67372161be8671abc9312833ed42b57bb7f788d4bf77cce",
+    "frame_count": 145,
+    "interval_seconds": 3600
+  },
+  "semantics": {
+    "risk_score": "weighted_normalized_hazard_index",
+    "baseline_risk_level": "discretized_hazard_index",
+    "recommended_research_target": "operational_action_level",
+    "probability_claim": "NOT_SUPPORTED",
+    "severity_claim": "NOT_CALIBRATED"
+  },
+  "split_policy": {
+    "policy_version": "purged_time_space_holdout_v1",
+    "fit_frame_end_exclusive": 91,
+    "validation_frame_start": 97,
+    "validation_frame_end_exclusive": 114,
+    "test_frame_start": 120,
+    "time_purge_frames": 6,
+    "fit_row_range": [0, 18],
+    "validation_row_range": [21, 25],
+    "test_row_range": [28, 31],
+    "spatial_purge_rows": 3,
+    "stability_time_block_frames": 24,
+    "stability_spatial_block_rows": 3
+  },
+  "baseline": {
+    "policy_id": "c_equal_width_floor_v1",
+    "thresholds": [0.2, 0.4, 0.6, 0.8]
+  },
+  "statistical_candidate": {
+    "policy_id": "fit_quantile_strata_v1",
+    "quantiles": [0.2, 0.4, 0.6, 0.8],
+    "status": "DESCRIPTIVE_ONLY"
+  },
+  "metric_definitions": {
+    "separation": "between-level score variance and adjacent median distance; descriptive only",
+    "monotonicity": "assigned level must not decrease as risk_score increases",
+    "route_utility": "future C shadow evaluation of risk-time tradeoff and selected-route stability",
+    "stability": "threshold sensitivity across disjoint fit time blocks and spatial folds"
+  }
+}
