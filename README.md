@@ -16,6 +16,11 @@ Last Verified: 2026-08-23
 > - 原文件去向：[README.archive-20260814-pre-governance.md](README.archive-20260814-pre-governance.md)。
 > - 改造原因：统一正式主线、可选 CNN 后端、验证证据和后续开发入口。
 
+> **路径约定（2026-08-24）**：本文件中 `${ARCTIC_ROUTE_ROOT}` 为工作区根占位符，
+> 指向包含各工作包目录（`arctic_route_contracts/`、`work_package_a/` 等）的公共根。
+> 解析优先级：环境变量 > 当前所在目录 > `$HOME`。完整定义见
+> `arctic_route_governance/README.md` 的"路径约定"章节。
+
 # 工作包 B：逐小时环境风险场
 
 ## Research Validation 定位（2026-08-21 23:18）
@@ -92,7 +97,7 @@ CNN 单步输出自动伪装成正式时序 RiskFrame，也不把 `synthetic`、
 ## 快速验证
 
 ```bash
-cd /root/my_project/work_package_b
+cd ${ARCTIC_ROUTE_ROOT}/work_package_b
 make env-create     # 首次创建 Mamba 前缀
 make sync
 make check          # 正式路径

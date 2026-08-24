@@ -42,7 +42,7 @@ Command:
 
 ```bash
 uv run python scripts/benchmark_grid_profiles.py \
-  --output /root/my_project/.runtime/test-logs/b-grid-kernel-20260822.json
+  --output ${ARCTIC_ROUTE_ROOT}/.runtime/test-logs/b-grid-kernel-20260822.json
 ```
 
 Eight measured iterations per profile after one warm-up:

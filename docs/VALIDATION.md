@@ -50,7 +50,7 @@ Browser E2E、12h/24h replay 或性能/体积 benchmark。
 
 ## 2026-08-14 可复核结果
 
-在 `/root/my_project/work_package_b` 的现有有效 Mamba 前缀与锁定 uv 环境中执行：
+在 `${ARCTIC_ROUTE_ROOT}/work_package_b` 的现有有效 Mamba 前缀与锁定 uv 环境中执行：
 
 | 命令 | 结果 | 覆盖边界 |
 |---|---|---|
@@ -88,7 +88,7 @@ P2 sidecar，且未进入 formal build / RiskFrame / store / C。
 ## 复核命令
 
 ```bash
-cd /root/my_project/work_package_b
+cd ${ARCTIC_ROUTE_ROOT}/work_package_b
 make check
 make model-check
 ```

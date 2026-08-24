@@ -87,11 +87,11 @@ sampled cell centers.
 ## Reproduction and evidence（2026-08-22 01:11 +08:00）
 
 ```bash
-cd /root/my_project/work_package_b
+cd ${ARCTIC_ROUTE_ROOT}/work_package_b
 uv run python scripts/benchmark_formal_grid_profiles.py \
-  --a-data-root /root/my_project/work_package_a/data \
-  --run-context /root/my_project/work_package_a/data/output/rc2-smoke/output-tromso-144h-r2/run-context.json \
-  --output-root /root/my_project/.runtime/experiments/b-formal-grid-round2
+  --a-data-root ${ARCTIC_ROUTE_ROOT}/work_package_a/data \
+  --run-context ${ARCTIC_ROUTE_ROOT}/work_package_a/data/output/rc2-smoke/output-tromso-144h-r2/run-context.json \
+  --output-root ${ARCTIC_ROUTE_ROOT}/.runtime/experiments/b-formal-grid-round2
 ```
 
 Canonical runtime outputs remain untracked under `.runtime`; the report records
