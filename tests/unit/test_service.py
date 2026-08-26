@@ -8,10 +8,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import xarray as xr
 from arctic_route_planning.contracts import validate_canonical_risk_id
 
 from arctic_route_risk import (
     BInputEnvelope,
+    GridCompatibilityError,
     RiskBuildRequest,
     RiskBuildService,
     RiskPipelineError,
@@ -20,7 +22,11 @@ from arctic_route_risk import (
     model_config_digest,
 )
 from arctic_route_risk.config import DemoRiskModelConfig
-from arctic_route_risk.service import _demo_unvalidated_risk, _regrid_variable
+from arctic_route_risk.service import (
+    _demo_unvalidated_risk,
+    _polar_stereographic_xy,
+    _regrid_variable,
+)
 
 GENERATED = datetime(2026, 8, 2, tzinfo=UTC)
 PROJECT_ROOT = Path(__file__).parents[2]
@@ -77,6 +83,64 @@ def test_land_sea_mask_uses_nearest_spatial_alignment(formal_fixture) -> None:
     )
 
     assert set(np.unique(values)) == {0.0, 1.0}
+
+
+def test_polar_curvilinear_grid_regrids_continuous_field(formal_fixture) -> None:
+    frame, _, _ = _curvilinear_frame(formal_fixture)
+    target_lat = np.array([74.90, 74.95])
+    target_lon = np.array([-10.20, -10.00])
+
+    values = _regrid_variable(
+        frame,
+        "wind_u10",
+        target_lat,
+        target_lon,
+        categorical=False,
+    )
+
+    target_lon_grid, target_lat_grid = np.meshgrid(target_lon, target_lat)
+    target_x, target_y = _polar_stereographic_xy(
+        longitude_degrees=target_lon_grid,
+        latitude_degrees=target_lat_grid,
+        radius_metres=6_378_273.0,
+        central_meridian_degrees=-45.0,
+    )
+    expected = 2.0 * target_y + 3.0 * target_x
+    np.testing.assert_allclose(values, expected, atol=1e-10)
+
+
+def test_polar_curvilinear_grid_uses_nearest_for_categorical(formal_fixture) -> None:
+    frame, _, _ = _curvilinear_frame(
+        formal_fixture,
+        field=np.array([[0.0, 1.0, 2.0], [10.0, 11.0, 12.0], [20.0, 21.0, 22.0]]),
+    )
+    target_lat = np.array([74.90, 74.95])
+    target_lon = np.array([-10.20, -10.00])
+
+    values = _regrid_variable(
+        frame,
+        "wind_u10",
+        target_lat,
+        target_lon,
+        categorical=True,
+    )
+
+    np.testing.assert_array_equal(values, np.array([[1.0, 12.0], [10.0, 21.0]]))
+
+
+def test_polar_curvilinear_grid_rejects_unknown_projection(formal_fixture) -> None:
+    frame, _, _ = _curvilinear_frame(
+        formal_fixture,
+        attrs={"query_projection": "+proj=merc +lon_0=-45 +R=6378273"},
+    )
+    with pytest.raises(GridCompatibilityError, match="unsupported curvilinear projection"):
+        _regrid_variable(
+            frame,
+            "wind_u10",
+            np.array([75.0]),
+            np.array([-10.0]),
+            categorical=False,
+        )
 
 
 def test_model_digest_is_policy_only_not_realized_corridor_grid() -> None:
@@ -327,3 +391,45 @@ def test_v2_configuration_rejects_missing_extra_and_illegal_values(
 
 def _legacy_bounded(values: np.ndarray, lower: float, upper: float) -> np.ndarray:
     return np.clip((values - lower) / (upper - lower), 0.0, 1.0)
+
+
+def _curvilinear_frame(
+    formal_fixture,
+    *,
+    field: np.ndarray | None = None,
+    attrs: dict[str, str] | None = None,
+):
+    source = formal_fixture.prepared.frames["ocean_current"][0]
+    x = np.array([9.6, 9.66, 9.72], dtype=np.float64)
+    y = np.array([-13.9, -13.84, -13.78], dtype=np.float64)
+    xx, yy = np.meshgrid(x, y)
+    latitude, longitude = _inverse_polar_stereographic(xx, yy)
+    if field is None:
+        field = 2.0 * yy + 3.0 * xx
+    projection_attrs = {
+        "query_projection": "+proj=stere +lon_0=-45 +lat_0=90 +k=1 +R=6378273"
+    }
+    projection_attrs.update(attrs or {})
+    dataset = xr.Dataset(
+        {
+            "wind_u10": (("time", "y", "x"), field[np.newaxis, ...]),
+        },
+        coords={
+            "time": [datetime(2026, 7, 15, tzinfo=UTC)],
+            "x": xr.DataArray(x, dims=("x",), attrs={"units": "100  km"}),
+            "y": xr.DataArray(y, dims=("y",), attrs={"units": "100  km"}),
+            "latitude": (("y", "x"), latitude),
+            "longitude": (("y", "x"), longitude),
+        },
+        attrs=projection_attrs,
+    )
+    return replace(source, payload=dataset), x, y
+
+
+def _inverse_polar_stereographic(
+    x: np.ndarray, y: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    rho = np.hypot(x, y) * 100_000.0
+    latitude = np.rad2deg(np.pi / 2.0 - 2.0 * np.arctan(rho / (2.0 * 6_378_273.0)))
+    longitude = -45.0 + np.rad2deg(np.arctan2(x, -y))
+    return latitude, longitude

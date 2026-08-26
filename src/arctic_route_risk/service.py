@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -17,6 +19,7 @@ from arctic_route_planning.contracts import (
     RiskFrame,
     SourceReference,
 )
+from scipy.interpolate import RegularGridInterpolator
 
 from arctic_route_risk.bc_codec import with_canonical_risk_id
 from arctic_route_risk.config import (
@@ -469,18 +472,43 @@ def _regrid_variable(
             f"required_variable_missing: {frame.record.data_id} has no {variable}"
         )
     array = dataset[variable]
-    rename: dict[str, str] = {}
+    coordinate_names: dict[str, str] = {}
     for canonical, aliases in (
-        ("latitude", ("latitude", "lat")),
-        ("longitude", ("longitude", "lon")),
+        ("latitude", ("latitude", "lat", "nav_lat")),
+        ("longitude", ("longitude", "lon", "nav_lon")),
     ):
-        matches = [name for name in aliases if name in array.coords or name in array.dims]
+        matches = [
+            name
+            for name in aliases
+            if name in array.coords or name in array.dims or name in dataset
+        ]
         if not matches:
             raise GridCompatibilityError(
                 f"grid_incompatible: {frame.record.data_id} lacks {canonical} coordinate"
             )
-        if matches[0] != canonical:
-            rename[matches[0]] = canonical
+        coordinate_names[canonical] = matches[0]
+    latitude_coord = dataset[coordinate_names["latitude"]]
+    longitude_coord = dataset[coordinate_names["longitude"]]
+    if latitude_coord.ndim == 2 or longitude_coord.ndim == 2:
+        if latitude_coord.ndim != 2 or longitude_coord.ndim != 2:
+            raise GridCompatibilityError(
+                f"grid_incompatible: {frame.record.data_id} has mismatched curvilinear coordinates"
+            )
+        return _regrid_polar_curvilinear(
+            dataset=dataset,
+            array=array,
+            latitude_coord=latitude_coord,
+            longitude_coord=longitude_coord,
+            latitude=latitude,
+            longitude=longitude,
+            data_id=frame.record.data_id,
+            categorical=categorical,
+        )
+    rename = {
+        actual: canonical
+        for canonical, actual in coordinate_names.items()
+        if actual != canonical
+    }
     array = array.rename(rename)
     for dimension in tuple(array.dims):
         if dimension not in {"latitude", "longitude"}:
@@ -517,6 +545,193 @@ def _regrid_variable(
             f"grid_incompatible: unexpected aligned shape for {frame.record.data_id}"
         )
     return values
+
+
+def _regrid_polar_curvilinear(
+    *,
+    dataset: xr.Dataset,
+    array: xr.DataArray,
+    latitude_coord: xr.DataArray,
+    longitude_coord: xr.DataArray,
+    latitude: np.ndarray,
+    longitude: np.ndarray,
+    data_id: str,
+    categorical: bool,
+) -> np.ndarray:
+    """Interpolate an A TOPAZ ``originalGrid`` field onto B's target grid.
+
+    A preserves the native curvilinear ``(y, x)`` grid, its two-dimensional
+    latitude/longitude coordinates, and the explicit ``query_projection``.
+    The adapter intentionally accepts only the documented spherical north
+    polar-stereographic form.  Unknown projections, missing projection
+    parameters, missing 100-km axes, and non-rectangular source axes fail
+    closed instead of guessing a transform.
+    """
+
+    source_dims = latitude_coord.dims
+    if longitude_coord.dims != source_dims or latitude_coord.shape != longitude_coord.shape:
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} curvilinear latitude/longitude shape mismatch"
+        )
+    if len(source_dims) != 2:
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} curvilinear coordinates must be two-dimensional"
+        )
+    if not np.all(np.isfinite(latitude_coord.values)) or not np.all(
+        np.isfinite(longitude_coord.values)
+    ):
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} curvilinear coordinates contain non-finite values"
+        )
+
+    for dimension in tuple(array.dims):
+        if dimension not in source_dims:
+            if array.sizes[dimension] != 1:
+                raise GridCompatibilityError(
+                    f"grid_incompatible: {data_id} has unsupported {dimension}"
+                )
+            array = array.isel({dimension: 0}, drop=True)
+    y_dimension = next(
+        (dimension for dimension in source_dims if dimension.casefold() in {"y", "projection_y"}),
+        None,
+    )
+    x_dimension = next(
+        (dimension for dimension in source_dims if dimension.casefold() in {"x", "projection_x"}),
+        None,
+    )
+    if y_dimension is None or x_dimension is None or y_dimension == x_dimension:
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} curvilinear source must expose distinct x/y axes"
+        )
+    try:
+        array = array.transpose(y_dimension, x_dimension)
+    except ValueError as exc:
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} curvilinear field does not match source axes"
+        ) from exc
+    values = np.asarray(array.values, dtype=np.float64)
+    if values.shape != latitude_coord.shape:
+        expected_shape = (dataset.sizes[y_dimension], dataset.sizes[x_dimension])
+        if values.shape != expected_shape:
+            raise GridCompatibilityError(
+                f"grid_incompatible: {data_id} curvilinear field shape does not match coordinates"
+            )
+    y_axis = _projection_axis(dataset, y_dimension, axis="y", data_id=data_id)
+    x_axis = _projection_axis(dataset, x_dimension, axis="x", data_id=data_id)
+    if values.shape != (y_axis.size, x_axis.size):
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} projected axes and field shape differ"
+        )
+
+    if np.all(np.diff(y_axis) < 0):
+        y_axis = y_axis[::-1]
+        values = values[::-1, :]
+    elif not np.all(np.diff(y_axis) > 0):
+        raise GridCompatibilityError(f"grid_incompatible: {data_id} y axis is non-monotonic")
+    if np.all(np.diff(x_axis) < 0):
+        x_axis = x_axis[::-1]
+        values = values[:, ::-1]
+    elif not np.all(np.diff(x_axis) > 0):
+        raise GridCompatibilityError(f"grid_incompatible: {data_id} x axis is non-monotonic")
+
+    radius, central_meridian = _polar_stereographic_parameters(dataset, data_id=data_id)
+    target_longitude_grid, target_latitude_grid = np.meshgrid(
+        np.asarray(longitude, dtype=np.float64),
+        np.asarray(latitude, dtype=np.float64),
+    )
+    target_x, target_y = _polar_stereographic_xy(
+        longitude_degrees=target_longitude_grid,
+        latitude_degrees=target_latitude_grid,
+        radius_metres=radius,
+        central_meridian_degrees=central_meridian,
+    )
+    interpolator = RegularGridInterpolator(
+        (y_axis, x_axis),
+        values,
+        method="nearest" if categorical else "linear",
+        bounds_error=False,
+        fill_value=np.nan,
+    )
+    points = np.column_stack((target_y.ravel(), target_x.ravel()))
+    return np.asarray(interpolator(points), dtype=np.float64).reshape(
+        latitude.size, longitude.size
+    )
+
+
+def _projection_axis(
+    dataset: xr.Dataset, dimension: str, *, axis: str, data_id: str
+) -> np.ndarray:
+    coordinate = dataset.coords.get(dimension)
+    if coordinate is None or coordinate.dims != (dimension,) or coordinate.ndim != 1:
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} missing one-dimensional projected {axis} axis"
+        )
+    values = np.asarray(coordinate.values, dtype=np.float64)
+    if values.size < 2 or not np.all(np.isfinite(values)):
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} projected {axis} axis is invalid"
+        )
+    units = re.sub(r"[\s_]+", "", str(coordinate.attrs.get("units", "")).casefold())
+    if units not in {"100km", "100kilometer", "100kilometers", "100000m"}:
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} projected {axis} axis must declare 100-km units"
+        )
+    return values
+
+
+def _polar_stereographic_parameters(
+    dataset: xr.Dataset, *, data_id: str
+) -> tuple[float, float]:
+    raw_projection = dataset.attrs.get("query_projection")
+    if not isinstance(raw_projection, str) or not raw_projection.strip():
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} curvilinear source lacks explicit query_projection"
+        )
+    parameters: dict[str, str] = {}
+    for token in raw_projection.split():
+        if not token.startswith("+") or "=" not in token:
+            continue
+        key, value = token[1:].split("=", 1)
+        parameters[key.casefold()] = value
+    if parameters.get("proj", "").casefold() not in {"stere", "polar_stereographic"}:
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} unsupported curvilinear projection"
+        )
+    try:
+        radius = float(parameters["r"])
+        central_meridian = float(parameters["lon_0"])
+        latitude_origin = float(parameters["lat_0"])
+        scale = float(parameters.get("k", parameters.get("k_0", "1")))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} query_projection lacks valid polar parameters"
+        ) from exc
+    if (
+        not math.isfinite(radius)
+        or radius <= 0
+        or not math.isfinite(central_meridian)
+        or not math.isfinite(latitude_origin)
+        or abs(latitude_origin - 90.0) > 1e-9
+        or not math.isfinite(scale)
+        or abs(scale - 1.0) > 1e-9
+    ):
+        raise GridCompatibilityError(
+            f"grid_incompatible: {data_id} only unit-scale north polar stereographic is supported"
+        )
+    return radius, central_meridian
+
+
+def _polar_stereographic_xy(
+    *,
+    longitude_degrees: np.ndarray,
+    latitude_degrees: np.ndarray,
+    radius_metres: float,
+    central_meridian_degrees: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    latitude = np.deg2rad(latitude_degrees)
+    longitude_delta = np.deg2rad(longitude_degrees - central_meridian_degrees)
+    rho = 2.0 * radius_metres * np.tan(np.pi / 4.0 - latitude / 2.0) / 100_000.0
+    return rho * np.sin(longitude_delta), -rho * np.cos(longitude_delta)
 
 
 def _demo_unvalidated_risk(
