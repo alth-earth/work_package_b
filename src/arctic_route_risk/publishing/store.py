@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -14,6 +13,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import RLock
 from typing import Any, Protocol
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 from arctic_route_planning.contracts import (
     CommittedRiskWindow,
@@ -453,22 +457,40 @@ class PersistentRiskStore:
         _validate_run_id(run_id)
         lock_digest = hashlib.sha256(run_id.encode("utf-8")).hexdigest()
         lock_path = self._run_locks / f"{lock_digest}.lock"
-        operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
         with lock_path.open("a+b") as handle:
-            fcntl.flock(handle.fileno(), operation)
+            _lock_file(handle, exclusive=exclusive)
             try:
                 yield
             finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                _unlock_file(handle)
 
     @contextmanager
     def _store_write_locked(self) -> Iterator[None]:
         with self._lock_path.open("a+b") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            _lock_file(handle, exclusive=True)
             try:
                 yield
             finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                _unlock_file(handle)
+
+
+def _lock_file(handle: Any, *, exclusive: bool) -> None:
+    if os.name == "nt":
+        handle.seek(0)
+        handle.write(b"\0")
+        handle.flush()
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        return
+    operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+    fcntl.flock(handle.fileno(), operation)
+
+
+def _unlock_file(handle: Any) -> None:
+    if os.name == "nt":
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _commit_document(window: CommittedRiskWindow) -> dict[str, Any]:
