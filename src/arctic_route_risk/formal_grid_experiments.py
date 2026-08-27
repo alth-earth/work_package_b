@@ -72,6 +72,16 @@ class PeakRssSampler:
             return
 
 
+def _hard_reason_counter(frame: RiskFrame) -> Counter[str]:
+    if "hard_reason" in frame.payload:
+        reasons = np.asarray(frame.payload["hard_reason"].values, dtype=np.str_)
+        return Counter(str(value) for value in reasons.ravel() if str(value))
+    attr_counts = frame.payload.attrs.get("hard_reason_counts", {})
+    if isinstance(attr_counts, dict):
+        return Counter({str(key): int(value) for key, value in attr_counts.items()})
+    return Counter()
+
+
 def build_formal_grid_profile(
     *,
     envelope: BInputEnvelope,
@@ -123,10 +133,9 @@ def summarize_formal_frames(
     encoded_bytes = 0
     for frame in frames:
         levels = np.asarray(frame.payload["risk_level"].values, dtype=np.uint8)
-        reasons = np.asarray(frame.payload["hard_reason"].values, dtype=np.str_)
         scores = np.asarray(frame.payload["risk_score"].values, dtype=np.float64)
         per_frame_levels = Counter(int(value) for value in levels.ravel())
-        per_frame_reasons = Counter(str(value) for value in reasons.ravel() if str(value))
+        per_frame_reasons = _hard_reason_counter(frame)
         level_counts.update(per_frame_levels)
         hard_reason_counts.update(per_frame_reasons)
         finite = scores[np.isfinite(scores)]

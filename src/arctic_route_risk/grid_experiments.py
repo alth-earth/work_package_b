@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import resource
 import time
 import tracemalloc
 from dataclasses import dataclass
@@ -15,6 +14,11 @@ from typing import Any
 
 import numpy as np
 import xarray as xr
+
+try:  # pragma: no cover - Windows does not provide resource.
+    import resource
+except ModuleNotFoundError:  # pragma: no cover - platform fallback.
+    resource = None
 
 from arctic_route_risk.config import TargetGridConfig
 from arctic_route_risk.errors import RiskPipelineError
@@ -235,9 +239,15 @@ def _benchmark_profile(
         "maximum_runtime_ms": round(max(durations), 6),
         "kernel_output_bytes": output_bytes,
         "peak_python_bytes": peak_python_bytes,
-        "process_peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+        "process_peak_rss_kib": _process_peak_rss_kib(),
         "output_digest": digest,
     }
+
+
+def _process_peak_rss_kib() -> int | None:
+    if resource is None:
+        return None
+    return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
 
 
 def _arrays_digest(arrays: tuple[np.ndarray, ...]) -> str:
