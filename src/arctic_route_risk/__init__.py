@@ -33,12 +33,18 @@ from arctic_route_risk.modeling import (
     RuleBaselineBackend,
     intake_legacy_cnn_zip,
 )
+from arctic_route_risk.plotting import (
+    render_binary_risk_map,
+    render_color_risk_map,
+    render_risk_maps,
+)
 from arctic_route_risk.publishing import PersistentRiskStore
 from arctic_route_risk.risk_explanation import (
     RiskBuildTraceResult,
     RiskExplanationResearchExporter,
 )
 from arctic_route_risk.service import RiskBuildRequest, RiskBuildService
+from arctic_route_risk.time_horizons import mentor_required_offsets, stage_for_offset
 
 __all__ = [
     "MODEL_ARTIFACT_INVALID",
@@ -74,6 +80,11 @@ __all__ = [
     "intake_legacy_cnn_zip",
     "load_risk_build_configuration",
     "model_config_digest",
+    "mentor_required_offsets",
+    "render_binary_risk_map",
+    "render_color_risk_map",
+    "render_risk_maps",
+    "stage_for_offset",
 ]
 
 __version__ = "0.2.0"

@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from threading import RLock
+from threading import Condition, RLock
 from typing import Any, Protocol
 
 if os.name == "nt":
@@ -474,12 +474,67 @@ class PersistentRiskStore:
                 _unlock_file(handle)
 
 
+class _WindowsInProcessReadWriteLock:
+    def __init__(self) -> None:
+        self._condition = Condition()
+        self._readers = 0
+        self._writer = False
+
+    def acquire(self, *, exclusive: bool) -> None:
+        with self._condition:
+            if exclusive:
+                while self._writer or self._readers:
+                    self._condition.wait()
+                self._writer = True
+                return
+            while self._writer:
+                self._condition.wait()
+            self._readers += 1
+
+    def release(self, *, exclusive: bool) -> None:
+        with self._condition:
+            if exclusive:
+                self._writer = False
+            else:
+                self._readers -= 1
+            self._condition.notify_all()
+
+
+_WINDOWS_LOCKS_GUARD = RLock()
+_WINDOWS_LOCKS: dict[str, _WindowsInProcessReadWriteLock] = {}
+_WINDOWS_LOCK_HANDLES: dict[int, tuple[_WindowsInProcessReadWriteLock, bool]] = {}
+
+
+def _windows_lock_for(path: str) -> _WindowsInProcessReadWriteLock:
+    resolved = str(Path(path).resolve())
+    with _WINDOWS_LOCKS_GUARD:
+        lock = _WINDOWS_LOCKS.get(resolved)
+        if lock is None:
+            lock = _WindowsInProcessReadWriteLock()
+            _WINDOWS_LOCKS[resolved] = lock
+        return lock
+
+
 def _lock_file(handle: Any, *, exclusive: bool) -> None:
     if os.name == "nt":
-        handle.seek(0)
-        handle.write(b"\0")
-        handle.flush()
-        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        process_lock = _windows_lock_for(handle.name)
+        process_lock.acquire(exclusive=exclusive)
+        locked_with_msvcrt = False
+        if os.path.getsize(handle.name) == 0:
+            handle.seek(0)
+            handle.write(b"\0")
+            handle.flush()
+        if exclusive:
+            try:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+                locked_with_msvcrt = True
+            except Exception:
+                process_lock.release(exclusive=exclusive)
+                raise
+        _WINDOWS_LOCK_HANDLES[handle.fileno()] = (process_lock, exclusive)
+        if exclusive:
+            _WINDOWS_LOCK_HANDLES[-handle.fileno()] = (process_lock, locked_with_msvcrt)
         return
     operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
     fcntl.flock(handle.fileno(), operation)
@@ -487,8 +542,14 @@ def _lock_file(handle: Any, *, exclusive: bool) -> None:
 
 def _unlock_file(handle: Any) -> None:
     if os.name == "nt":
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        process_lock, exclusive = _WINDOWS_LOCK_HANDLES.pop(handle.fileno())
+        _, locked_with_msvcrt = _WINDOWS_LOCK_HANDLES.pop(-handle.fileno(), (process_lock, False))
+        try:
+            if locked_with_msvcrt:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        finally:
+            process_lock.release(exclusive=exclusive)
         return
     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
@@ -630,6 +691,8 @@ def _atomic_replace(path: Path, payload: bytes) -> None:
 
 
 def _fsync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
     descriptor = os.open(path, os.O_RDONLY)
     try:
         os.fsync(descriptor)

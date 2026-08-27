@@ -123,20 +123,35 @@ def _distribution(frames: Sequence[Any]) -> dict[str, Any]:
         scores = np.asarray(current["risk_score"].values, dtype=np.float64)
         levels = np.asarray(current["risk_level"].values, dtype=np.uint8)
         hard_mask = np.asarray(current["hard_mask"].values, dtype=bool)
-        reasons = np.asarray(current["hard_reason"].values, dtype=np.str_)
+        reasons = (
+            np.asarray(current["hard_reason"].values, dtype=np.str_)
+            if "hard_reason" in current
+            else None
+        )
         finite = np.isfinite(scores)
         unknown = ~finite
         hard = hard_mask
         level_counts.update(int(value) for value in levels.ravel())
-        reason_counts.update(str(value) for value in reasons.ravel())
+        frame_reason_counts = (
+            Counter(str(value) for value in reasons.ravel())
+            if reasons is not None
+            else Counter(
+                {
+                    str(key): int(value)
+                    for key, value in current.attrs.get("hard_reason_counts", {}).items()
+                }
+            )
+        )
+        reason_counts.update(frame_reason_counts)
         finite_scores.append(scores[finite])
         total_cells += int(scores.size)
         unknown_count += int(np.count_nonzero(unknown))
         unknown_navigable_count += int(np.count_nonzero(unknown & ~hard))
         hard_mask_count += int(np.count_nonzero(hard))
-        hard_reason_mismatch_count += int(
-            np.count_nonzero((reasons == "NONE") != ~hard)
-        )
+        if reasons is not None:
+            hard_reason_mismatch_count += int(
+                np.count_nonzero((reasons == "NONE") != ~hard)
+            )
         frame_finite = scores[finite]
         per_frame.append(
             {
@@ -145,9 +160,7 @@ def _distribution(frames: Sequence[Any]) -> dict[str, Any]:
                     str(level): int(np.count_nonzero(levels == level))
                     for level in range(1, 6)
                 },
-                "hard_reasons": dict(
-                    sorted(Counter(str(value) for value in reasons.ravel()).items())
-                ),
+                "hard_reasons": dict(sorted(frame_reason_counts.items())),
                 "unknown_count": int(np.count_nonzero(unknown)),
                 "unknown_navigable_count": int(np.count_nonzero(unknown & ~hard)),
                 "finite_risk_score_min": float(np.min(frame_finite)) if frame_finite.size else None,

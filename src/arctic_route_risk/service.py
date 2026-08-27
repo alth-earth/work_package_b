@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -36,6 +37,7 @@ from arctic_route_risk.risk_explanation import (
     RiskExplanationFrameTrace,
     RiskExplanationTraceWindow,
 )
+from arctic_route_risk.time_horizons import stage_for_offset
 
 _VARIABLES: dict[str, tuple[str, ...]] = {
     "land_sea_mask": ("land_sea_mask",),
@@ -258,6 +260,15 @@ class RiskBuildService:
             variable: int(np.count_nonzero(~np.isfinite(values)))
             for variable, values in arrays.items()
         }
+        forecast_offset_hours = (
+            valid_time - envelope.requested_start
+        ).total_seconds() / 3600.0
+        full_route_horizon_hours = (
+            envelope.requested_end - envelope.requested_start
+        ).total_seconds() / 3600.0
+        hard_reason_counts = dict(
+            sorted(Counter(str(value) for value in reason.ravel()).items())
+        )
         level = np.full(risk.shape, 5, dtype=np.uint8)
         finite = np.isfinite(risk)
         level[finite] = np.clip(np.floor(risk[finite] * 5) + 1, 1, 5).astype(np.uint8)
@@ -271,17 +282,32 @@ class RiskBuildService:
                     ("latitude", "longitude"),
                     speed_factor.astype(np.float32),
                 ),
-                "hard_reason": (("latitude", "longitude"), reason.astype(np.str_)),
             },
             coords={"latitude": latitude, "longitude": longitude},
             attrs={
                 "crs": "EPSG:4326",
                 "grid_id": grid_id,
                 "development_only": True,
-                "calibration_status": "demo_unvalidated",
+                "calibration_status": request.model_config.calibration_status,
                 "risk_formula": request.model_config.formula_version,
+                "model_delivery_role": "b_to_c_comprehensive_risk_field",
                 "temporal_policy": request.model_config.temporal_policy_version,
+                "forecast_offset_hours": round(forecast_offset_hours, 6),
+                "forecast_stage": stage_for_offset(
+                    forecast_offset_hours,
+                    total_route_hours=full_route_horizon_hours,
+                ),
+                "full_route_horizon_hours": round(full_route_horizon_hours, 6),
+                "mentor_time_sequence": (
+                    "0-6h execution, 0-24h rolling, 24-72h corridor, "
+                    "full-route reference"
+                ),
                 "hard_mask_policy": request.model_config.hard_mask_policy,
+                "hard_reason_counts": hard_reason_counts,
+                "hard_reason_payload_policy": (
+                    "omitted_from_bc_risk_frame_v2_payload; retained as "
+                    "payload.attrs['hard_reason_counts'] for audit"
+                ),
                 "missing_input_variable_counts": missing_input_variable_counts,
                 "ice_free_neutralized_input_counts": ice_free_neutralized_counts,
                 "ice_free_predicate": {

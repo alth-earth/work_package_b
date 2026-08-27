@@ -127,3 +127,13 @@ make model-check    # 可选：仅验证 CNN P1
 3. 完成规则风险的科学标定与阈值评审，再讨论 `demo_unvalidated` 升级。
 4. 获得明确批准后才实现 CNN P2 sidecar；保持 fail-open、不可写正式 store、不可进入 C。
 5. P2 证据充分后再决定是否启动 P3 多时效改造；P4 正式接入必须另行评审。
+
+## Final B-to-C delivery alignment
+
+The formal B output is now kept directly compatible with C's `bc.risk-frame.v2` contract. The machine-readable payload contains only `risk_score`, `risk_level`, `hard_mask`, `confidence` and `environment_speed_factor`. Hard-mask explanation is retained as `payload.attrs["hard_reason_counts"]` instead of an extra payload variable, so route-planning code can consume the frame without schema mismatch.
+
+The final delivery model parameters live in `configs/models/final_delivery_comprehensive_risk_v1.json`. This configuration keeps the existing hourly interface and records the project-trained component weights under `model_version = final_delivery_comprehensive_risk.v1`.
+
+Time semantics are explicitly labelled with mentor-aligned stages: 0-2 h high-confidence execution, 2-4 h recommendation, 4-6 h prediction, 6-24 h rolling dynamic risk, 24-72 h corridor risk and full-route reference risk. The full-route stage follows the actual `RunContext` route horizon rather than a fixed nine-day assumption.
+
+Detailed handoff notes are in `docs/B_TO_C_FINAL_DELIVERY.md`.
