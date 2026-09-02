@@ -7,7 +7,7 @@ Document Role: CANONICAL
 Scope: Work Package B validation evidence and acceptance boundary
 Canonical For: current B validation commands, results, and maturity limits
 Branch: research-validation-system
-Last Verified: 2026-08-23
+Last Verified: 2026-09-02
 ---
 
 > [!NOTE]
@@ -18,6 +18,20 @@ Last Verified: 2026-08-23
 > - 改造原因：以本次实测结果纠正旧计数，并分开正式路径和 CNN 可选后端证据。
 
 # 正式工作包 B 验证记录
+
+## 2026-09-02 当前集成复核
+
+本次复核仅核对现有 C endpoint fail-closed 语义和 B 集成夹具，未修改 C 的 endpoint 门禁、
+corridor、网格定义或任何已发布航线制品。
+
+| 命令 | 结果 | 说明 |
+|---|---|---|
+| `.venv/bin/python -m pytest -m integration -q` | `8 passed, 1 warning, EXIT_CODE=0` | 当前 B 集成通过；warning 为可选 ecCodes 后端未安装 |
+| `allowed_region_has_no_grid_node` 负向用例 | PASS | 粗网格无允许区域节点时按预期拒绝，验证 fail-closed |
+
+`allowed_region_has_no_grid_node` 只在专门的粗网格负向用例中预期出现；它表示该输入网格无法
+覆盖允许区域，不表示 B 公式或当前 Winter Viewer 航线失败。下方 2026-08-23 的 `7 passed,
+1 failed` 是当时的历史快照，保留用于审计，不得替代本次复核结果。
 
 ## 2026-08-23 Risk Explanation Research Exporter（2026-08-23 21:40 +08:00）
 
@@ -41,7 +55,7 @@ Last Verified: 2026-08-23
 | `.venv/bin/ruff check src tests` | PASS | 当前工作树 Ruff 通过 |
 | `.venv/bin/pytest -q tests/unit/test_risk_explanation.py` | `11 passed` | producer 专项 |
 | 明确列举本轮相关 contract/unit 文件 | `62 passed` | 排除并发 `calibration_shadow` 文件 |
-| `.venv/bin/pytest -m integration -q` | `7 passed, 1 failed` | 失败为既有 Murmansk–Dikson default grid 无 destination allowed-region node；本轮未改 C/走廊/网格 |
+| `.venv/bin/pytest -m integration -q` | `7 passed, 1 failed`（历史快照） | 当时失败为既有 Murmansk–Dikson default grid 无 destination allowed-region node；本轮未改 C/走廊/网格 |
 | `make lint/test/integration/check` | BLOCKED | `uv run --locked` 报 `uv.lock needs to be updated`；本轮未改 `uv.lock` 或上游 A 依赖 |
 
 该验证成熟度为 `UNIT_PASS`，不是 `SMOKE_PASS`、`REAL_E2E_PASS` 或生产 Sidecar 发布证据。
