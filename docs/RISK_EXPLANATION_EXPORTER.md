@@ -4,10 +4,10 @@ Content Status:
   - COMPLETED
   - IN_PROGRESS
 Document Role: CANONICAL
-Scope: Work Package B risk-explanation.v1 research producer interface and semantics
+Scope: Work Package B risk-explanation.v1 producer, immutable artifact, and transport semantics
 Canonical For: B component trace capture and research sidecar export behavior
 Branch: research-validation-system
-Last Verified: 2026-08-23
+Last Verified: 2026-09-01 23:40 +08:00
 Related Canonical Docs:
   - ../README.md
   - RISK_MODEL.md
@@ -15,11 +15,11 @@ Related Supporting Docs:
   - ../../arctic_route_governance/reports/research-validation/RISK_EXPLANATION_SIDECAR_DESIGN_REPORT.md
 ---
 
-# B Risk Explanation Research Exporter
+# B Risk Explanation Producer and Immutable Transport
 
-## 定位与职责（2026-08-23 21:40 +08:00）
+## 定位与职责（2026-09-01）
 
-`RiskExplanationResearchExporter` 是 B 拥有的研究输出器，用于生成可选
+`RiskExplanationResearchExporter` 是 B 拥有的 trace-bound producer，用于生成可选
 `risk-explanation.v1` JSON sidecar。它解释当前 `demo_unvalidated` 加权规则怎样得到某个格点
 的 `risk_score`，不修改、替代或扩展 `bc.risk-frame.v2`。
 
@@ -28,7 +28,7 @@ Related Supporting Docs:
 `UNAVAILABLE` 发布；任何不能证明的解释失败关闭。它不负责科学因果推断，也不解释 C 的
 route objective、ETA、候选比较或 selection。
 
-## Producer 接口（2026-08-23 21:40 +08:00）
+## Producer 接口（2026-09-01）
 
 生产流程分为两个明确阶段：
 
@@ -52,6 +52,18 @@ document = RiskExplanationResearchExporter(...).export(
 `export()` 输入是已提交 `CommittedRiskWindow` 与带完整性摘要的 `RiskBuildTraceResult`；输出是 JSON-ready
 `dict[str, Any]`，`schema_version = risk-explanation.v1`。输出器不读取文件系统中的 D artifact，
 也不接受只含最终 `risk_score` 的输入来重建贡献。
+
+随后由 `RiskExplanationArtifactStore` 发布不可变 artifact/manifest：
+
+```python
+publication = RiskExplanationArtifactStore(output / "risk-explanation").publish(document)
+manifest, sidecar = RiskExplanationArtifactStore.read(publication["manifest_path"])
+```
+
+artifact 名称由 sidecar canonical JSON 的 SHA-256 决定；manifest 只允许相对路径并在 readback
+时复核 artifact digest、schema 和 identity。该传输链是正式工程链，但 sidecar 仍明确标记
+`calibration_status=demo_unvalidated` 与 `sidecar_maturity=research_unvalidated`，不得升级为
+科学标定或 real-vessel qualification。
 
 `RiskBuildTraceResult` 通过 B pipeline 内部 factory 封装；摘要绑定 frames、窗口身份、坐标、
 validity mask、全部 normalized arrays、weights 和 contributions。对象被 `replace()` 或数组重分配
@@ -152,15 +164,19 @@ make check
 git diff --check
 ```
 
-## Limitations（2026-08-23 21:40 +08:00）
+## Limitations（2026-09-01 23:40 +08:00）
 
 - 仅支持当前 `deterministic_environment_components_v2` 加性公式；非加性模型没有经审阅的原生
   attribution 时必须保持不可用。
-- 输出器是 research-only，没有独立 immutable Sidecar store、canonical sidecar ID、manifest、
-  Orchestrator transport 或 D consumer。
+- B 已提供独立 immutable Sidecar store、canonical content-addressed ID 与
+  `risk-explanation-manifest.v1`；Orchestrator 的 `--risk-explanation-manifest` 已完成真实
+  Winter 同 RiskWindow digest/schema/identity transport，D 只消费该 producer artifact。
+  这条链仍属于 engineering/research evidence，不等同于科学标定或导航资格。
 - `normalized_value` / `weight` 目前只在 B trace API 中，不属于 strict v1 JSON；这是现有 Schema
   的明确兼容边界。
 - 解释说明工程公式的数值构成，不证明权重科学有效、环境因素具有因果关系或航线适航。
-- 完整逐格 JSON 的体积、压缩、分帧索引、按需加载和真实 Viewer 性能尚未验证。
+- 完整逐格 JSON 的体积与按需加载仍未做生产级优化；本轮真实 Winter v7 已完成 145 帧
+  transport/readback 与 Firefox 点击格点验证，逐格 `COMPLETE/PARTIAL/UNAVAILABLE` 仍按源数据
+  有限性输出。
 - 格点风险解释不等于路线选择解释；完整回答仍需 C 已发布的 objective、route metrics、hard
   constraint 和候选比较证据，但 C 不消费本 Sidecar。

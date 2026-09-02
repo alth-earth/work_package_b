@@ -32,6 +32,8 @@ from arctic_route_risk import (
     PersistentRiskStore,
     RiskBuildRequest,
     RiskBuildService,
+    RiskExplanationArtifactStore,
+    RiskExplanationResearchExporter,
     load_risk_build_configuration,
 )
 from arctic_route_risk.bc_codec import risk_frame_to_document
@@ -237,6 +239,22 @@ def main() -> int:
     parser.add_argument("--profiles-config", type=Path, required=True)
     parser.add_argument("--profile", choices=("baseline", "medium", "fine"), default="medium")
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument(
+        "--emit-risk-explanation",
+        action="store_true",
+        help=(
+            "capture the same-call B formula trace and publish an immutable "
+            "risk-explanation.v1 sidecar + manifest"
+        ),
+    )
+    parser.add_argument(
+        "--generated-at",
+        type=_parse_utc,
+        help=(
+            "override the RiskFrame generated_at timestamp for deterministic "
+            "replay binding; defaults to the current UTC second"
+        ),
+    )
     parser.add_argument("--cache-memory-mb", type=float, default=2048.0)
     parser.add_argument(
         "--risk-schema",
@@ -294,17 +312,23 @@ def main() -> int:
             generation_id=int(execution_spec["generation_id"]),
             knowledge_as_of=bundle.as_of_time,
         )
-        generated_at = datetime.now(UTC).replace(microsecond=0)
+        generated_at = args.generated_at or datetime.now(UTC).replace(microsecond=0)
         build_started = time.perf_counter()
+        build_request = RiskBuildRequest(
+            envelope=envelope,
+            target_bbox=suite.bbox,
+            grid_config=grid,
+            model_config=configuration.model_config,
+        )
         with PeakRssSampler() as memory:
-            frames = RiskBuildService(utc_now=lambda: generated_at).build_window(
-                RiskBuildRequest(
-                    envelope=envelope,
-                    target_bbox=suite.bbox,
-                    grid_config=grid,
-                    model_config=configuration.model_config,
-                )
-            )
+            if args.emit_risk_explanation:
+                build_result = RiskBuildService(
+                    utc_now=lambda: generated_at
+                ).build_window_with_explanation_trace(build_request)
+                frames = build_result.frames
+            else:
+                build_result = None
+                frames = RiskBuildService(utc_now=lambda: generated_at).build_window(build_request)
         build_seconds = time.perf_counter() - build_started
         build_peak_rss_kib = memory.peak_kib
     finally:
@@ -353,6 +377,36 @@ def main() -> int:
     _write_json(args.output_root / "frame-index.json", frame_index)
     _write_json(args.output_root / "distribution.json", distribution)
 
+    explanation_publication = None
+    if build_result is not None:
+        sidecar = RiskExplanationResearchExporter(utc_now=lambda: generated_at).export(
+            committed_window=verified_commit,
+            build_result=build_result,
+        )
+        explanation_store = RiskExplanationArtifactStore(args.output_root / "risk-explanation")
+        publication = explanation_store.publish(sidecar)
+        verified_manifest, verified_sidecar = explanation_store.read(
+            publication["manifest_path"]
+        )
+        if verified_sidecar != sidecar:
+            raise ValueError("risk explanation sidecar changed during publication readback")
+        if verified_manifest["artifact_sha256"] != publication["manifest"]["artifact_sha256"]:
+            raise ValueError("risk explanation manifest digest changed during readback")
+        explanation_publication = {
+            "schema_version": "risk-explanation-transport.v1",
+            "status": "PUBLISHED",
+            "manifest_path": str(
+                publication["manifest_path"].relative_to(args.output_root)
+            ),
+            "artifact_path": str(
+                publication["artifact_path"].relative_to(args.output_root)
+            ),
+            "artifact_id": publication["manifest"]["artifact_id"],
+            "artifact_sha256": publication["manifest"]["artifact_sha256"],
+            "risk_window_id": committed.commit_id,
+        }
+        _write_json(args.output_root / "risk-explanation-publication.json", explanation_publication)
+
     metadata = {
         "artifact_kind": "winter-b-risk-validation",
         "status": "FORMAL_VALIDATED",
@@ -395,6 +449,7 @@ def main() -> int:
             "frame_schema_validation": "PASS",
             "commit_readback_validation": "PASS",
             "provenance": sorted({frame.provenance.value for frame in frames}),
+            "risk_explanation": explanation_publication,
         },
         "performance_observation": {
             "resolve_seconds": round(resolve_seconds, 6),

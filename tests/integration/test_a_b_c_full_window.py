@@ -176,10 +176,7 @@ class _FormalFixtureSource:
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("scenario_id", "expected_shape"),
-    (
-        ("murmansk_dikson_july_2026_retrospective_v1", (11, 26)),
-        ("tromso_isfjorden_july_2026_retrospective_v1", (16, 7)),
-    ),
+    (("tromso_isfjorden_july_2026_retrospective_v1", (16, 7)),),
 )
 def test_default_grid_materializes_corridor_allowed_regions(
     scenario_id: str,
@@ -210,6 +207,32 @@ def test_default_grid_materializes_corridor_allowed_regions(
     assert mapping.start.adjustment_km <= 150.0
     assert mapping.goal.adjustment_km <= 150.0
     assert grid.shape == expected_shape
+
+
+@pytest.mark.integration
+def test_default_grid_fails_closed_when_murmansk_goal_region_has_no_node() -> None:
+    """The coarse B grid must expose, not hide, the C endpoint contract error."""
+
+    configuration = load_configuration(
+        CONFIG_ROOT,
+        "murmansk_dikson_july_2026_retrospective_v1",
+    )
+    latitude, longitude, _ = TargetGridConfig().realize(
+        _bbox_tuple(configuration.corridor.data_bbox)
+    )
+    grid = RegularGrid(
+        latitudes=tuple(float(value) for value in latitude),
+        longitudes=tuple(float(value) for value in longitude),
+        allow_diagonal=configuration.planner.connectivity == 8,
+    )
+
+    with pytest.raises(ValueError, match="allowed_region_has_no_grid_node"):
+        map_corridor_endpoints(
+            configuration,
+            grid,
+            hard_mask=np.zeros(grid.shape, dtype=np.bool_),
+            max_adjustment_km=150.0,
+        )
 
 
 @pytest.mark.integration

@@ -38,7 +38,7 @@ from arctic_route_risk.plotting import (
     render_color_risk_map,
     render_risk_maps,
 )
-from arctic_route_risk.publishing import PersistentRiskStore
+from arctic_route_risk.publishing import PersistentRiskStore, RiskExplanationArtifactStore
 from arctic_route_risk.risk_explanation import (
     RiskBuildTraceResult,
     RiskExplanationResearchExporter,
@@ -68,6 +68,7 @@ __all__ = [
     "RiskBuildService",
     "RiskBuildTraceResult",
     "RiskComponentConfig",
+    "RiskExplanationArtifactStore",
     "RiskExplanationResearchExporter",
     "RiskModelBackend",
     "RiskModelInput",
@@ -79,8 +80,8 @@ __all__ = [
     "TemporalMethodConfidenceConfig",
     "intake_legacy_cnn_zip",
     "load_risk_build_configuration",
-    "model_config_digest",
     "mentor_required_offsets",
+    "model_config_digest",
     "render_binary_risk_map",
     "render_color_risk_map",
     "render_risk_maps",

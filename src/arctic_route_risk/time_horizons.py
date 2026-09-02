@@ -37,7 +37,7 @@ def mentor_required_offsets(total_route_hours: float) -> tuple[int, ...]:
 
     if not math.isfinite(float(total_route_hours)) or total_route_hours < 0:
         raise ValueError("total_route_hours must be a non-negative finite number")
-    route_hours = int(round(float(total_route_hours)))
+    route_hours = round(float(total_route_hours))
     offsets: list[int] = list(range(0, min(24, route_hours) + 1))
     if route_hours > 24:
         offsets.extend(range(30, min(72, route_hours) + 1, 6))

@@ -6,7 +6,7 @@ Content Status:
 Document Role: CANONICAL
 Scope: work package B entrypoint and public boundary
 Branch: research-validation-system
-Last Verified: 2026-08-23
+Last Verified: 2026-09-01
 ---
 
 > [!NOTE]
@@ -68,7 +68,7 @@ evidence; the existing model remains `demo_unvalidated`.
 | RC1 hard-mask 策略 | `land_sea_mask_plus_unknown_v1`（source-unknown → hard） | B 风险帧 145 帧 unknown-navigable=0 |
 | RC2 hard_reason | `hard_reason`（NONE/LAND/DATA_UNAVAILABLE/OTHER）+ `missing_input_variable_counts` | 每格原因可解释；hard_mask/fail-closed 不变（RC2 分支） |
 | RC2 无冰语义 | `land_sea_mask_plus_unknown_ice_free_v1`：无冰水域 ice_type/edge 中性化为 0 | 解决 Tromsø 外海起点误判 DATA_UNAVAILABLE；RC1 策略不变 |
-| `risk-explanation.v1` B research exporter | 已实现、`UNIT_PASS`、未生产集成 | 同次公式求值捕获 component trace；不修改 RiskFrame/C/D |
+| `risk-explanation.v1` B producer + immutable store | 已实现、`UNIT_PASS`、未校准 | 同次公式求值捕获 component trace；content-addressed artifact/manifest 原子发布；不修改 RiskFrame/C/D |
 | 科学/真船风险标定 | 未完成（非 RC1 门槛） | 见 [风险基线](docs/RISK_MODEL.md) |
 
 统一事实口径：`22_深度学习综合风险预测模型.zip` 已整合进当前 B 仓库的可选实验后端并完成
@@ -93,6 +93,19 @@ B 拥有输入一致性校验、逐小时风险、不可通行掩码、置信度
 ETA、代价函数、路径搜索和重规划。B 不读取 A 私有目录，不从文件名或 mtime 猜测时间，不把
 CNN 单步输出自动伪装成正式时序 RiskFrame，也不把 `synthetic`、`legacy_unverified` 或
 `demo_unvalidated` 产物写成 `formal`。
+
+### risk-explanation.v1 发布链（2026-09-01）
+
+启用 `scripts/run_winter_b_validation.py --emit-risk-explanation` 时，B 在同一次真实公式
+求值中封存 component trace；窗口提交并 readback 后，由
+`RiskExplanationArtifactStore` 写入不可变、content-addressed 的
+`risk-explanation.v1` artifact 与 `risk-explanation-manifest.v1`。manifest 绑定
+`risk_window_id` 和完整 producer identity，重复 ID 的不同内容会拒绝，readback 会复核
+SHA-256。该 sidecar 的 `calibration_status=demo_unvalidated`、`sidecar_maturity=research_unvalidated`；
+“正式”仅指 B 生产与不可变传输链已闭合，不是科学标定或真实导航资格。
+
+Orchestrator 通过 manifest 校验后才可传输到 D；D 仍是可选 consumer，缺失/错配继续显示
+`Explanation unavailable`，不会改变 RiskFrame、风险图层、路线或仿真。
 
 ## 快速验证
 

@@ -6,7 +6,7 @@ Content Status:
 Document Role: SUPPORTING
 Scope: work package B change history
 Branch: research-validation-system
-Last Verified: 2026-08-23
+Last Verified: 2026-09-01
 ---
 
 # 工作包 B 变更记录
@@ -16,6 +16,15 @@ Last Verified: 2026-08-23
 [验收记录](docs/VALIDATION.md)。
 
 ## Unreleased
+
+### risk-explanation.v1 immutable transport（2026-09-01）
+
+- `--emit-risk-explanation` 让 B 在同次公式求值后发布 trace-bound
+  `risk-explanation.v1` sidecar；不改变 `bc.risk-frame.v2`、公式或 C 输入。
+- 新增 content-addressed `RiskExplanationArtifactStore` 与
+  `risk-explanation-manifest.v1`，原子写入、重复 ID 冲突拒绝、readback SHA-256/identity
+  校验；Orchestrator 可据此严格传输到 D。
+- 侧车仍为 `demo_unvalidated` / `research_unvalidated`，该实现不等于科学标定或真实导航资格。
 
 ### Risk explanation research exporter（2026-08-23 21:40 +08:00）
 
@@ -27,8 +36,9 @@ Last Verified: 2026-08-23
 - 支持 `COMPLETE` / `PARTIAL` / `UNAVAILABLE`；缺测 component 保持缺席/NaN，不补零、不猜测、
   不重归一权重；`land_sea_mask` validity 缺测明确为 `UNAVAILABLE`，零风险不虚构主要贡献。
 - `RiskBuildTraceResult` 完整性摘要绑定 frames/identity/grid/validity/component arrays/weights，拒绝
-  总和保持不变但 attribution 被替换的 trace。当前无 Sidecar store、Orchestrator/D 集成或真实
-  Viewer E2E。
+  总和保持不变但 attribution 被替换的 trace。本轮新增 Sidecar store 与 Orchestrator
+  transport；D consumer 继续可选、失败关闭；真实 Winter identity-bound causal replay
+  仍需独立制品。
 
 ### Winter B first scientific validation（2026-08-23 02:44 +08:00）
 
