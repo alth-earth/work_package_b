@@ -19,24 +19,17 @@ from arctic_route_risk.errors import (
     RiskPipelineError,
     StaleGenerationError,
 )
-from arctic_route_risk.modeling import (
+from arctic_route_risk.modeling.contracts import (
     MODEL_ARTIFACT_INVALID,
     MODEL_INPUT_INCOMPATIBLE,
     MODEL_OUTPUT_INVALID,
     MODEL_RUNTIME_UNAVAILABLE,
-    LegacyCnnOneStepBackend,
     ModelArtifactManifest,
     ModelArtifactPolicy,
     RiskModelBackend,
     RiskModelInput,
     RiskModelOutput,
     RuleBaselineBackend,
-    intake_legacy_cnn_zip,
-)
-from arctic_route_risk.plotting import (
-    render_binary_risk_map,
-    render_color_risk_map,
-    render_risk_maps,
 )
 from arctic_route_risk.publishing import PersistentRiskStore, RiskExplanationArtifactStore
 from arctic_route_risk.risk_explanation import (
@@ -45,6 +38,32 @@ from arctic_route_risk.risk_explanation import (
 )
 from arctic_route_risk.service import RiskBuildRequest, RiskBuildService
 from arctic_route_risk.time_horizons import mentor_required_offsets, stage_for_offset
+
+_OPTIONAL_EXPORTS = {
+    "LegacyCnnOneStepBackend": (
+        "arctic_route_risk.modeling.legacy_cnn",
+        "LegacyCnnOneStepBackend",
+    ),
+    "intake_legacy_cnn_zip": (
+        "arctic_route_risk.modeling.artifacts",
+        "intake_legacy_cnn_zip",
+    ),
+    "render_binary_risk_map": ("arctic_route_risk.plotting", "render_binary_risk_map"),
+    "render_color_risk_map": ("arctic_route_risk.plotting", "render_color_risk_map"),
+    "render_risk_maps": ("arctic_route_risk.plotting", "render_risk_maps"),
+}
+
+
+def __getattr__(name: str):
+    """Load legacy model intake and presentation helpers only on explicit use."""
+
+    try:
+        module_name, attribute = _OPTIONAL_EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(name) from exc
+    from importlib import import_module
+
+    return getattr(import_module(module_name), attribute)
 
 __all__ = [
     "MODEL_ARTIFACT_INVALID",
